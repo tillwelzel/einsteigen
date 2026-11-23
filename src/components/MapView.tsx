@@ -234,19 +234,20 @@ export function MapView({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const styleReadyRef = useRef(false);
-  const styleKeyRef = useRef<string>(getBasemapKey(mapStyleMode, isDark));
+  const styleKeyRef = useRef<string>('');
   const lastCameraKeyRef = useRef<string>('');
+  const renderOverlaysRef = useRef<() => void>(() => {});
 
-  // Initialize MapLibre instance
+  // Initialize MapLibre instance (attach style.load before any setStyle call)
   useEffect(() => {
     if (!containerRef.current) return;
 
     styleReadyRef.current = false;
-    styleKeyRef.current = getBasemapKey(mapStyleMode, isDark);
+    styleKeyRef.current = '';
+    lastCameraKeyRef.current = '';
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: getBasemapStyle(mapStyleMode, isDark),
       center: MUNICH_CENTER,
       zoom: 11.4,
       minZoom: 9.2,
@@ -261,32 +262,22 @@ export function MapView({
 
     map.on('style.load', () => {
       styleReadyRef.current = true;
+      renderOverlaysRef.current();
     });
 
     mapRef.current = map;
 
     return () => {
       styleReadyRef.current = false;
+      styleKeyRef.current = '';
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
       map.remove();
       mapRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Swap basemap style cleanly when Standard/Satellite or Light/Dark changes
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const nextKey = getBasemapKey(mapStyleMode, isDark);
-    if (nextKey === styleKeyRef.current) return;
-    styleKeyRef.current = nextKey;
-    styleReadyRef.current = false;
-    map.setStyle(getBasemapStyle(mapStyleMode, isDark));
-  }, [mapStyleMode, isDark]);
-
-  // Render markers, label visibility, faint network backdrop (when revealed), and route overlays
+  // Sync basemap style, label visibility, home transit network, markers, and route overlays
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -693,20 +684,16 @@ export function MapView({
       }
     };
 
-    const onStyleLoad = () => {
-      styleReadyRef.current = true;
-      renderOverlays();
-    };
+    renderOverlaysRef.current = renderOverlays;
 
-    map.on('style.load', onStyleLoad);
-
-    if (styleReadyRef.current && map.isStyleLoaded()) {
+    const nextKey = getBasemapKey(mapStyleMode, isDark);
+    if (nextKey !== styleKeyRef.current) {
+      styleKeyRef.current = nextKey;
+      styleReadyRef.current = false;
+      map.setStyle(getBasemapStyle(mapStyleMode, isDark));
+    } else if (styleReadyRef.current) {
       renderOverlays();
     }
-
-    return () => {
-      map.off('style.load', onStyleLoad);
-    };
   }, [
     network,
     networkMode,
