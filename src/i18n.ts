@@ -4,7 +4,13 @@ export interface Translations {
   appName: string;
   tagline: string;
   daily: string;
+  dailyShort: string;
   freePlay: string;
+  freePlayShort: string;
+  showMap: string;
+  showPanel: string;
+  expandSheetAria: string;
+  collapseSheetAria: string;
   modeUS: string;
   modeUST: string;
   from: string;
@@ -104,7 +110,13 @@ const de: Translations = {
   appName: 'Einsteigen',
   tagline: 'Münchner ÖPNV-Rätsel',
   daily: 'Tagesrätsel',
+  dailyShort: 'Täglich',
   freePlay: 'Freies Spiel',
+  freePlayShort: 'Frei',
+  showMap: 'Karte',
+  showPanel: 'Linien',
+  expandSheetAria: 'Panel ausklappen',
+  collapseSheetAria: 'Karte vergrößern',
   modeUS: 'U + S',
   modeUST: 'U + S + Tram',
   from: 'Start',
@@ -239,7 +251,13 @@ const en: Translations = {
   appName: 'Einsteigen',
   tagline: 'Munich Transit Puzzle',
   daily: 'Daily',
+  dailyShort: 'Daily',
   freePlay: 'Free Play',
+  freePlayShort: 'Free',
+  showMap: 'Map',
+  showPanel: 'Lines',
+  expandSheetAria: 'Expand panel',
+  collapseSheetAria: 'Collapse panel to view map',
   modeUS: 'U + S',
   modeUST: 'U + S + Tram',
   from: 'Start',

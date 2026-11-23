@@ -213,15 +213,15 @@ export function DailySummaryModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs p-0 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-md max-h-[88dvh] flex flex-col rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden"
+        className="relative w-full sm:max-w-md max-h-[90dvh] sm:max-h-[88dvh] flex flex-col rounded-t-3xl sm:rounded-2xl bg-white dark:bg-zinc-900 border-t border-x sm:border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="shrink-0 flex items-start justify-between gap-3 px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
+        <div className="shrink-0 flex items-start justify-between gap-3 px-4 py-3.5 sm:px-5 sm:py-4 border-b border-zinc-100 dark:border-zinc-800">
           <div>
             <h2 className="font-display font-bold text-lg tracking-tight text-zinc-900 dark:text-white leading-tight">
               {t.dailyTitle(progress.dateKey)}
@@ -241,7 +241,7 @@ export function DailySummaryModal({
         </div>
 
         {/* Compact Metrics + 5-Round Strip */}
-        <div className="shrink-0 px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-800">
+        <div className="shrink-0 px-4 py-3 sm:px-5 sm:py-3.5 border-b border-zinc-100 dark:border-zinc-800">
           <div className="grid grid-cols-3 divide-x divide-zinc-200/80 dark:divide-zinc-800 text-center">
             <div className="pr-2">
               <div className="font-display font-bold text-xl tabular-nums text-zinc-900 dark:text-white leading-none">
@@ -316,7 +316,7 @@ export function DailySummaryModal({
         </div>
 
         {/* Per-Round Breakdown List */}
-        <div className="overflow-y-auto px-5 py-4 flex-1">
+        <div className="overflow-y-auto px-4 py-3 sm:px-5 sm:py-4 flex-1">
           <div className="rounded-xl border border-zinc-200/90 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/80 overflow-hidden">
             {progress.rounds.map((r, i) => {
               const fromName =
@@ -488,7 +488,7 @@ export function DailySummaryModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="shrink-0 px-5 py-3.5 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
+        <div className="shrink-0 px-4 pt-3 safe-bottom sm:px-5 sm:py-3.5 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
           <button
             type="button"
             onClick={handleShare}

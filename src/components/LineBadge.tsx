@@ -9,6 +9,7 @@ interface LineBadgeProps {
   selected?: boolean;
   onClick?: () => void;
   title?: string;
+  className?: string;
 }
 
 function inferMode(lineId: string): TransitMode {
@@ -25,6 +26,7 @@ export function LineBadge({
   selected = false,
   onClick,
   title,
+  className = '',
 }: LineBadgeProps) {
   const resolvedMode = mode ?? inferMode(lineId);
   const { color, textColor } = getLineVisual(lineId, resolvedMode);
@@ -55,6 +57,7 @@ export function LineBadge({
     selected
       ? 'ring-2 ring-zinc-900 dark:ring-white ring-offset-2 ring-offset-white dark:ring-offset-zinc-900'
       : '',
+    className,
   ].join(' ');
 
   if (interactive) {

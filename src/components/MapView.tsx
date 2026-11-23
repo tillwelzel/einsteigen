@@ -32,6 +32,8 @@ interface MapViewProps {
   optimalRoute: ComputedRoute;
   highlightedRoute: 'both' | 'player' | 'optimal';
   recenterTrigger: number;
+  mobileBottomInset?: number;
+  isSheetCollapsed?: boolean;
   onCanRecenterChange?: (canRecenter: boolean) => void;
 }
 
@@ -246,9 +248,10 @@ function createPinElement(
   const pill = document.createElement('div');
   if (kind === 'transfer') {
     pill.className =
-      'mb-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-white/95 dark:bg-zinc-900/95 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 shadow-md whitespace-nowrap flex items-center gap-1';
+      'mb-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-white/95 dark:bg-zinc-900/95 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 shadow-md whitespace-nowrap flex items-center gap-1';
     pill.appendChild(createMarkerSvg('transfer'));
     const text = document.createElement('span');
+    text.className = 'max-w-[150px] sm:max-w-none truncate';
     text.textContent = label;
     pill.appendChild(text);
   } else {
@@ -256,17 +259,18 @@ function createPinElement(
       kind === 'start'
         ? 'bg-emerald-600 text-white border-emerald-300/60'
         : 'bg-rose-600 text-white border-rose-300/60';
-    pill.className = `mb-1.5 pl-1.5 pr-2.5 py-1 rounded-xl text-xs font-bold shadow-lg shadow-black/25 border whitespace-nowrap flex items-center gap-1.5 ${badgeColor}`;
+    pill.className = `mb-1 sm:mb-1.5 pl-1.5 pr-2 sm:pr-2.5 py-0.5 sm:py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold shadow-lg shadow-black/25 border whitespace-nowrap flex items-center gap-1 sm:gap-1.5 ${badgeColor}`;
 
     if (roleTag) {
       const tag = document.createElement('span');
       tag.className =
-        'px-1.5 py-0.5 rounded-md bg-black/20 text-[10px] font-extrabold uppercase tracking-wider leading-none';
+        'px-1 sm:px-1.5 py-0.5 rounded-md bg-black/20 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider leading-none shrink-0';
       tag.textContent = roleTag;
       pill.appendChild(tag);
     }
 
     const text = document.createElement('span');
+    text.className = 'max-w-[165px] sm:max-w-none truncate';
     text.textContent = label;
     pill.appendChild(text);
   }
@@ -277,7 +281,7 @@ function createPinElement(
 
   if (kind !== 'transfer') {
     const pulse = document.createElement('span');
-    pulse.className = `absolute w-9 h-9 rounded-full animate-pulse-ring ${kind === 'start' ? 'bg-emerald-500/45' : 'bg-rose-500/45'
+    pulse.className = `absolute w-8 h-8 sm:w-9 sm:h-9 rounded-full animate-pulse-ring ${kind === 'start' ? 'bg-emerald-500/45' : 'bg-rose-500/45'
       }`;
     dotWrap.appendChild(pulse);
   }
@@ -285,9 +289,9 @@ function createPinElement(
   const dot = document.createElement('span');
   if (kind === 'transfer') {
     dot.className =
-      'w-3.5 h-3.5 rounded-full bg-white dark:bg-zinc-950 border-[3px] border-zinc-900 dark:border-white shadow-md';
+      'w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-white dark:bg-zinc-950 border-[2.5px] sm:border-[3px] border-zinc-900 dark:border-white shadow-md';
   } else {
-    dot.className = `relative w-7 h-7 rounded-full border-[2.5px] border-white dark:border-zinc-950 shadow-lg shadow-black/30 text-white flex items-center justify-center ${kind === 'start' ? 'bg-emerald-600' : 'bg-rose-600'
+    dot.className = `relative w-6 h-6 sm:w-7 sm:h-7 rounded-full border-[2.5px] border-white dark:border-zinc-950 shadow-lg shadow-black/30 text-white flex items-center justify-center ${kind === 'start' ? 'bg-emerald-600' : 'bg-rose-600'
       }`;
     dot.appendChild(createMarkerSvg(kind));
   }
@@ -295,6 +299,24 @@ function createPinElement(
   wrapper.appendChild(dotWrap);
 
   return wrapper;
+}
+
+function computeMobilePadding(
+  vh: number,
+  bottomInset: number,
+  isHome: boolean,
+): { top: number; bottom: number; left: number; right: number } {
+  const top = isHome ? 56 : 74;
+  const fallbackBottom = isHome
+    ? Math.round(vh * 0.42)
+    : Math.round(vh * 0.48);
+  const rawBottom = bottomInset > 0 ? bottomInset + 14 : fallbackBottom;
+  // Always keep at least 140px of clear map viewport height for fitBounds
+  const maxBottom = Math.max(80, vh - top - 140);
+  const bottom = Math.min(rawBottom, maxBottom);
+  return isHome
+    ? { top, bottom, left: 16, right: 16 }
+    : { top, bottom, left: 32, right: 32 };
 }
 
 export function MapView({
@@ -312,6 +334,8 @@ export function MapView({
   optimalRoute,
   highlightedRoute,
   recenterTrigger,
+  mobileBottomInset = 0,
+  isSheetCollapsed = false,
   onCanRecenterChange,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -322,7 +346,7 @@ export function MapView({
   const useCartoFallbackRef = useRef(false);
   const lastCameraKeyRef = useRef<string>('');
   const renderOverlaysRef = useRef<() => void>(() => { });
-  const recenterCameraRef = useRef<(() => void) | null>(null);
+  const recenterCameraRef = useRef<((duration?: number) => void) | null>(null);
   const defaultCameraRef = useRef<CameraSnapshot | null>(null);
   const isProgrammaticMoveRef = useRef(false);
   const lastReportedMovedRef = useRef(false);
@@ -330,11 +354,14 @@ export function MapView({
   const mapStyleModeRef = useRef(mapStyleMode);
   const isDarkRef = useRef(isDark);
   const showLabelsRef = useRef(isHome || isRevealed);
+  const mobileBottomInsetRef = useRef(mobileBottomInset);
+  const lastFittedInsetRef = useRef(0);
 
   onCanRecenterChangeRef.current = onCanRecenterChange;
   mapStyleModeRef.current = mapStyleMode;
   isDarkRef.current = isDark;
   showLabelsRef.current = isHome || isRevealed;
+  mobileBottomInsetRef.current = mobileBottomInset;
 
   // Initialize MapLibre instance (attach style.load before any setStyle call)
   useEffect(() => {
@@ -448,7 +475,15 @@ export function MapView({
 
     mapRef.current = map;
 
+    const handleResize = () => {
+      map.resize();
+    };
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+
     return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
       styleReadyRef.current = false;
       styleKeyRef.current = '';
       recenterCameraRef.current = null;
@@ -589,10 +624,14 @@ export function MapView({
 
         const applyHomeCamera = (duration = 650) => {
           const isDesktop = window.innerWidth >= 768;
-          const zoom = isDesktop ? 11.6 : 10.7;
+          const zoom = isDesktop ? 11.6 : 10.9;
           const padding = isDesktop
             ? { top: 40, bottom: 40, left: 420, right: 40 }
-            : { top: 64, bottom: 340, left: 16, right: 16 };
+            : computeMobilePadding(
+                window.innerHeight,
+                mobileBottomInsetRef.current,
+                true,
+              );
           defaultCameraRef.current = {
             center: new maplibregl.LngLat(MUNICH_CENTER[0], MUNICH_CENTER[1]),
             zoom,
@@ -616,7 +655,7 @@ export function MapView({
             { isAutoFit: true },
           );
         };
-        recenterCameraRef.current = () => applyHomeCamera(550);
+        recenterCameraRef.current = (duration = 550) => applyHomeCamera(duration);
 
         const cameraKey = 'home';
         if (cameraKey !== lastCameraKeyRef.current) {
@@ -807,7 +846,11 @@ export function MapView({
         const isDesktop = window.innerWidth >= 768;
         const padding = isDesktop
           ? { top: 96, bottom: 72, left: 450, right: 80 }
-          : { top: 88, bottom: 380, left: 48, right: 48 };
+          : computeMobilePadding(
+              window.innerHeight,
+              mobileBottomInsetRef.current,
+              false,
+            );
         const maxZoom = isRevealed ? 13.5 : 12.6;
         const target = map.cameraForBounds(bounds, {
           padding,
@@ -839,7 +882,7 @@ export function MapView({
           { isAutoFit: true },
         );
       };
-      recenterCameraRef.current = () => applyPlayCamera(550);
+      recenterCameraRef.current = (duration = 550) => applyPlayCamera(duration);
 
       // Only refit viewport when the puzzle or reveal/route highlight changes (not on basemap toggles)
       const cameraKey = `play|${fromStationId}|${toStationId}|${isRevealed}|${highlightedRoute}`;
@@ -894,8 +937,24 @@ export function MapView({
   // Trigger smooth recenter when requested by the user
   useEffect(() => {
     if (recenterTrigger === 0) return;
-    recenterCameraRef.current?.();
+    recenterCameraRef.current?.(550);
   }, [recenterTrigger]);
+
+  // Smoothly re-frame the visible map area on mobile when the bottom sheet height
+  // changes meaningfully (e.g. collapse/expand, Home -> Game, filter drawer toggle)
+  // while the user hasn't manually panned away.
+  useEffect(() => {
+    if (window.innerWidth >= 768) return;
+    if (!styleReadyRef.current || lastReportedMovedRef.current) return;
+    if (Math.abs(mobileBottomInset - lastFittedInsetRef.current) < 20) return;
+    lastFittedInsetRef.current = mobileBottomInset;
+    const id = window.setTimeout(() => {
+      if (!lastReportedMovedRef.current) {
+        recenterCameraRef.current?.(350);
+      }
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [mobileBottomInset, isSheetCollapsed]);
 
   return (
     <div

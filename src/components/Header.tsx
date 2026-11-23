@@ -42,17 +42,17 @@ export function Header({
   const ThemeIcon = isDark ? Sun : Moon;
 
   return (
-    <header className="fixed top-3 inset-x-3 z-20 pointer-events-none flex items-center justify-between gap-2">
+    <header className="fixed safe-top inset-x-2.5 md:top-3 md:inset-x-3 z-20 pointer-events-none flex items-center justify-between gap-1.5 md:gap-2">
       {/* Brand + Mode Switcher (hidden on Home Screen where the welcome card owns mode selection) */}
       {isHome ? (
         <div />
       ) : (
-        <div className="pointer-events-auto flex items-center gap-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border border-zinc-200/80 dark:border-zinc-800 rounded-2xl px-2.5 py-1.5 shadow-lg shadow-black/5">
+        <div className="pointer-events-auto flex items-center gap-1.5 md:gap-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border border-zinc-200/80 dark:border-zinc-800 rounded-2xl px-1.5 py-1 md:px-2.5 md:py-1.5 shadow-lg shadow-black/5">
           <button
             type="button"
             onClick={onGoHome}
             title={t.homeButtonTitle}
-            className="flex items-center gap-2 pr-1 rounded-xl hover:opacity-80 active:scale-[0.98] transition-all cursor-pointer"
+            className="flex items-center gap-2 sm:pr-1 rounded-xl hover:opacity-80 active:scale-[0.98] transition-all cursor-pointer shrink-0"
           >
             <div className="w-7 h-7 rounded-xl bg-[#0065ae] text-white flex items-center justify-center shadow-xs shrink-0">
               <TrainFront className="w-4 h-4" />
@@ -65,28 +65,30 @@ export function Header({
           </button>
 
           {/* Daily / Free Play segmented control */}
-          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/90 p-0.5 rounded-xl text-xs font-semibold">
+          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/90 p-0.5 rounded-xl text-[11px] sm:text-xs font-semibold">
             <button
               type="button"
               onClick={() => onChangeGameMode('daily')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`px-2 sm:px-2.5 py-1 rounded-lg whitespace-nowrap transition-all cursor-pointer ${
                 gameMode === 'daily'
                   ? 'bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white shadow-xs'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
               }`}
             >
-              {t.daily}
+              <span className="sm:hidden">{t.dailyShort}</span>
+              <span className="hidden sm:inline">{t.daily}</span>
             </button>
             <button
               type="button"
               onClick={() => onChangeGameMode('free')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`px-2 sm:px-2.5 py-1 rounded-lg whitespace-nowrap transition-all cursor-pointer ${
                 gameMode === 'free'
                   ? 'bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white shadow-xs'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
               }`}
             >
-              {t.freePlay}
+              <span className="sm:hidden">{t.freePlayShort}</span>
+              <span className="hidden sm:inline">{t.freePlay}</span>
             </button>
           </div>
 
@@ -95,7 +97,7 @@ export function Header({
             <button
               type="button"
               onClick={() => onChangeNetworkMode('us')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg whitespace-nowrap transition-all cursor-pointer ${
                 networkMode === 'us'
                   ? 'bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white shadow-xs'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
@@ -106,7 +108,7 @@ export function Header({
             <button
               type="button"
               onClick={() => onChangeNetworkMode('ust')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg whitespace-nowrap transition-all cursor-pointer ${
                 networkMode === 'ust'
                   ? 'bg-[#e30613] text-white shadow-xs'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
@@ -119,7 +121,7 @@ export function Header({
       )}
 
       {/* Right utility controls */}
-      <div className="pointer-events-auto flex items-center gap-1 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-1 shadow-lg shadow-black/5">
+      <div className="pointer-events-auto flex items-center gap-0.5 md:gap-1 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-1 shadow-lg shadow-black/5 shrink-0">
         {/* Compact mobile Tram toggle (only while playing) */}
         {!isHome && (
           <button
@@ -127,7 +129,7 @@ export function Header({
             onClick={() =>
               onChangeNetworkMode(networkMode === 'us' ? 'ust' : 'us')
             }
-            className={`md:hidden px-2 py-1.5 rounded-xl text-[11px] font-bold transition-colors cursor-pointer ${
+            className={`md:hidden px-1.5 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition-colors cursor-pointer ${
               networkMode === 'ust'
                 ? 'bg-[#e30613] text-white'
                 : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300'
@@ -141,7 +143,7 @@ export function Header({
         <button
           type="button"
           onClick={onToggleLocale}
-          className="px-2 py-1.5 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+          className="px-1.5 sm:px-2 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
           aria-label="Toggle language"
           title="DE / EN"
         >
@@ -151,7 +153,7 @@ export function Header({
         <button
           type="button"
           onClick={onOpenStats}
-          className="p-2 rounded-xl text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+          className="p-1.5 sm:p-2 rounded-xl text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
           aria-label={t.statsTitle}
           title={t.statsTitle}
         >
@@ -161,7 +163,7 @@ export function Header({
         <button
           type="button"
           onClick={onOpenHelp}
-          className="p-2 rounded-xl text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+          className="p-1.5 sm:p-2 rounded-xl text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
           aria-label={t.helpTitle}
           title={t.helpTitle}
         >
@@ -171,7 +173,7 @@ export function Header({
         <button
           type="button"
           onClick={onToggleTheme}
-          className="p-2 rounded-xl text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+          className="p-1.5 sm:p-2 rounded-xl text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
           aria-label="Toggle theme"
           title={isDark ? t.themeLight : t.themeDark}
         >

@@ -19,14 +19,14 @@ export function StatsModal({ open, onClose, t, stats }: StatsModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs p-0 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden"
+        className="w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl bg-white dark:bg-zinc-900 border-t border-x sm:border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
+        <div className="flex items-center justify-between px-4 py-3.5 sm:px-5 sm:py-4 border-b border-zinc-100 dark:border-zinc-800">
           <h2 className="font-display font-extrabold text-lg text-zinc-900 dark:text-white">
             {t.statsTitle}
           </h2>
@@ -40,7 +40,7 @@ export function StatsModal({ open, onClose, t, stats }: StatsModalProps) {
           </button>
         </div>
 
-        <div className="p-5 grid grid-cols-2 gap-3">
+        <div className="p-4 safe-bottom sm:p-5 grid grid-cols-2 gap-2.5 sm:gap-3">
           <div className="rounded-xl bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800 p-3.5 text-center">
             <Trophy className="w-4 h-4 text-amber-500 mx-auto mb-1" />
             <div className="font-display font-extrabold text-2xl text-zinc-900 dark:text-white">
