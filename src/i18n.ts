@@ -58,6 +58,17 @@ export interface Translations {
   themeAuto: string;
   themeLight: string;
   themeDark: string;
+  mapStyleStandard: string;
+  mapStyleSatellite: string;
+  mapStyleAriaLabel: string;
+  homeSubtitle: string;
+  homePlayDaily: string;
+  homeContinueDaily: string;
+  homePlayFree: string;
+  homeHideLinesHint: string;
+  homeNetworkLabel: string;
+  homeStatsBadge: (lines: number, stations: number) => string;
+  homeButtonTitle: string;
   showNetworkHint: string;
   zoneLabel: (zone: string) => string;
   validationError: (err: NonNullable<RouteValidationResult['error']>) => string;
@@ -140,11 +151,24 @@ const de: Translations = {
   helpScoringBody:
     'Optimal = innerhalb von 1 Min. der schnellsten Route · Stark = bis +4 Min. · Gut = bis +9 Min. · Angekommen = gültige Verbindung.',
   helpAttribution:
-    'Fahrplandaten: Münchner Verkehrs- und Tarifverbund GmbH (MVV), GTFS-Gesamtnetz (CC-BY 4.0). Karte: OpenFreeMap / OpenStreetMap.',
+    'Fahrplandaten: Münchner Verkehrs- und Tarifverbund GmbH (MVV), GTFS-Gesamtnetz (CC-BY 4.0). Karte: OpenFreeMap / OpenStreetMap · Satellit: Esri World Imagery.',
   close: 'Schließen',
   themeAuto: 'System',
   themeLight: 'Hell',
   themeDark: 'Dunkel',
+  mapStyleStandard: 'Standard',
+  mapStyleSatellite: 'Satellit',
+  mapStyleAriaLabel: 'Kartenansicht wechseln',
+  homeSubtitle:
+    'Erkennst du Münchens U-Bahn-, S-Bahn- und Tramnetz aus dem Kopf?',
+  homePlayDaily: 'Tagesrätsel starten',
+  homeContinueDaily: 'Tagesrätsel fortsetzen',
+  homePlayFree: 'Freies Spiel',
+  homeHideLinesHint:
+    'Sobald du startest, werden alle Linien auf der Karte ausgeblendet.',
+  homeNetworkLabel: 'Netz wählen',
+  homeStatsBadge: (lines, stations) => `${lines} Linien · ${stations} Halte`,
+  homeButtonTitle: 'Zur Startseite',
   showNetworkHint: 'Liniennetz ausblenden während du rätst — kein Schummeln!',
   zoneLabel: (z) => `Zone ${z}`,
   validationError: (err) => {
@@ -244,11 +268,24 @@ const en: Translations = {
   helpScoringBody:
     'Optimal = within 1 min of fastest · Great = within +4 min · Good = within +9 min · Valid = any valid connection.',
   helpAttribution:
-    'Schedule data: Münchner Verkehrs- und Tarifverbund GmbH (MVV), GTFS Gesamtnetz (CC-BY 4.0). Map: OpenFreeMap / OpenStreetMap.',
+    'Schedule data: Münchner Verkehrs- und Tarifverbund GmbH (MVV), GTFS Gesamtnetz (CC-BY 4.0). Map: OpenFreeMap / OpenStreetMap · Satellite: Esri World Imagery.',
   close: 'Close',
   themeAuto: 'Auto',
   themeLight: 'Light',
   themeDark: 'Dark',
+  mapStyleStandard: 'Standard',
+  mapStyleSatellite: 'Satellite',
+  mapStyleAriaLabel: 'Switch map style',
+  homeSubtitle:
+    'Can you navigate Munich’s U-Bahn, S-Bahn, and Tram network from memory?',
+  homePlayDaily: 'Play Daily Challenge',
+  homeContinueDaily: 'Continue Daily',
+  homePlayFree: 'Free Play',
+  homeHideLinesHint:
+    'All transit lines hide from the map as soon as you start playing.',
+  homeNetworkLabel: 'Choose network',
+  homeStatsBadge: (lines, stations) => `${lines} lines · ${stations} stations`,
+  homeButtonTitle: 'Back to Home',
   showNetworkHint: 'Station labels stay hidden while guessing.',
   zoneLabel: (z) => `Zone ${z}`,
   validationError: (err) => {

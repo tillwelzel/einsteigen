@@ -8,6 +8,8 @@ export type Locale = 'de' | 'en';
 
 export type ThemeSetting = 'auto' | 'light' | 'dark';
 
+export type MapStyleMode = 'standard' | 'satellite';
+
 export interface Station {
   id: string;
   name: string;

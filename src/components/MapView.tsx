@@ -1,6 +1,11 @@
 import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
-import type { ComputedRoute, MunichNetwork, NetworkMode } from '../types';
+import type {
+  ComputedRoute,
+  MapStyleMode,
+  MunichNetwork,
+  NetworkMode,
+} from '../types';
 
 interface LineStringFeature {
   type: 'Feature';
@@ -26,6 +31,8 @@ interface MapViewProps {
   fromStationId: string;
   toStationId: string;
   isDark: boolean;
+  mapStyleMode: MapStyleMode;
+  isHome: boolean;
   isRevealed: boolean;
   playerRoute: ComputedRoute | null;
   optimalRoute: ComputedRoute;
@@ -34,36 +41,62 @@ interface MapViewProps {
 
 const MUNICH_CENTER: [number, number] = [11.5761, 48.1371];
 
-function createBasemapStyle(isDark: boolean): maplibregl.StyleSpecification {
-  const tileUrl = isDark
-    ? 'https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png'
-    : 'https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}@2x.png';
+const OPENFREEMAP_LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+const OPENFREEMAP_DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark';
 
+function createSatelliteStyle(): maplibregl.StyleSpecification {
   return {
     version: 8,
     sources: {
-      basemap: {
+      'esri-world-imagery': {
         type: 'raster',
         tiles: [
-          tileUrl,
-          tileUrl.replace('a.basemaps', 'b.basemaps'),
-          tileUrl.replace('a.basemaps', 'c.basemaps'),
+          'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         ],
         tileSize: 256,
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>',
+          'Tiles &copy; <a href="https://www.esri.com/" target="_blank">Esri</a> &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
       },
     },
     layers: [
       {
-        id: 'basemap-layer',
+        id: 'esri-world-imagery-layer',
         type: 'raster',
-        source: 'basemap',
+        source: 'esri-world-imagery',
         minzoom: 0,
         maxzoom: 19,
       },
     ],
   };
+}
+
+function getBasemapKey(mapStyleMode: MapStyleMode, isDark: boolean): string {
+  if (mapStyleMode === 'satellite') return 'satellite';
+  return isDark ? 'standard-dark' : 'standard-light';
+}
+
+function getBasemapStyle(
+  mapStyleMode: MapStyleMode,
+  isDark: boolean,
+): string | maplibregl.StyleSpecification {
+  if (mapStyleMode === 'satellite') {
+    return createSatelliteStyle();
+  }
+  return isDark ? OPENFREEMAP_DARK_STYLE : OPENFREEMAP_LIGHT_STYLE;
+}
+
+function setBasemapLabelsVisibility(map: maplibregl.Map, visible: boolean) {
+  const layers = map.getStyle()?.layers ?? [];
+  const visibility = visible ? 'visible' : 'none';
+  for (const layer of layers) {
+    if (layer.type === 'symbol') {
+      try {
+        map.setLayoutProperty(layer.id, 'visibility', visibility);
+      } catch {
+        // Ignore layers that cannot toggle visibility
+      }
+    }
+  }
 }
 
 function routeToLineFeatures(
@@ -190,6 +223,8 @@ export function MapView({
   fromStationId,
   toStationId,
   isDark,
+  mapStyleMode,
+  isHome,
   isRevealed,
   playerRoute,
   optimalRoute,
@@ -198,19 +233,24 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
-  const styleLoadedRef = useRef(false);
+  const styleReadyRef = useRef(false);
+  const styleKeyRef = useRef<string>(getBasemapKey(mapStyleMode, isDark));
+  const lastCameraKeyRef = useRef<string>('');
 
   // Initialize MapLibre instance
   useEffect(() => {
     if (!containerRef.current) return;
 
+    styleReadyRef.current = false;
+    styleKeyRef.current = getBasemapKey(mapStyleMode, isDark);
+
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: createBasemapStyle(isDark),
+      style: getBasemapStyle(mapStyleMode, isDark),
       center: MUNICH_CENTER,
       zoom: 11.4,
       minZoom: 9.2,
-      maxZoom: 16.5,
+      maxZoom: 17,
       attributionControl: { compact: true },
     });
 
@@ -219,14 +259,14 @@ export function MapView({
       'bottom-right',
     );
 
-    map.on('load', () => {
-      styleLoadedRef.current = true;
+    map.on('style.load', () => {
+      styleReadyRef.current = true;
     });
 
     mapRef.current = map;
 
     return () => {
-      styleLoadedRef.current = false;
+      styleReadyRef.current = false;
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
       map.remove();
@@ -235,30 +275,40 @@ export function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Swap light/dark basemap cleanly on theme change
+  // Swap basemap style cleanly when Standard/Satellite or Light/Dark changes
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    styleLoadedRef.current = false;
-    map.setStyle(createBasemapStyle(isDark));
-  }, [isDark]);
+    const nextKey = getBasemapKey(mapStyleMode, isDark);
+    if (nextKey === styleKeyRef.current) return;
+    styleKeyRef.current = nextKey;
+    styleReadyRef.current = false;
+    map.setStyle(getBasemapStyle(mapStyleMode, isDark));
+  }, [mapStyleMode, isDark]);
 
-  // Render markers, faint network backdrop (when revealed), and route overlays
+  // Render markers, label visibility, faint network backdrop (when revealed), and route overlays
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
     const renderOverlays = () => {
+      if (mapStyleMode === 'standard') {
+        setBasemapLabelsVisibility(map, isHome || isRevealed);
+      }
+
       // Clear previous HTML markers
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
 
-      const fromSt = network.stations[fromStationId];
-      const toSt = network.stations[toStationId];
-      if (!fromSt || !toSt) return;
-
       // Remove old GeoJSON layers/sources if present
       const layerIds = [
+        'home-tram-casing',
+        'home-tram-lines',
+        'home-sbahn-casing',
+        'home-sbahn-lines',
+        'home-ubahn-casing',
+        'home-ubahn-lines',
+        'home-stations',
         'network-context-lines',
         'optimal-casing',
         'optimal-line',
@@ -269,10 +319,169 @@ export function MapView({
       for (const lid of layerIds) {
         if (map.getLayer(lid)) map.removeLayer(lid);
       }
-      const sourceIds = ['network-context', 'optimal-route', 'player-route', 'route-stops'];
+      const sourceIds = [
+        'home-tram',
+        'home-sbahn',
+        'home-ubahn',
+        'home-stations',
+        'network-context',
+        'optimal-route',
+        'player-route',
+        'route-stops',
+      ];
       for (const sid of sourceIds) {
         if (map.getSource(sid)) map.removeSource(sid);
       }
+
+      const isSatellite = mapStyleMode === 'satellite';
+      const casingColor = isSatellite
+        ? '#ffffff'
+        : isDark
+          ? '#09090b'
+          : '#ffffff';
+
+      if (isHome) {
+        const tramFeatures: LineStringFeature[] = [];
+        const sbahnFeatures: LineStringFeature[] = [];
+        const ubahnFeatures: LineStringFeature[] = [];
+
+        for (const line of Object.values(network.lines)) {
+          const target =
+            line.mode === 'ubahn'
+              ? ubahnFeatures
+              : line.mode === 'sbahn'
+                ? sbahnFeatures
+                : tramFeatures;
+          for (const branch of line.branches) {
+            const coords = branch
+              .map((id) => network.stations[id])
+              .filter(Boolean)
+              .map((st) => [st.lon, st.lat] as [number, number]);
+            if (coords.length >= 2) {
+              target.push({
+                type: 'Feature',
+                properties: {
+                  lineId: line.id,
+                  color: line.color,
+                  mode: line.mode,
+                },
+                geometry: { type: 'LineString', coordinates: coords },
+              });
+            }
+          }
+        }
+
+        const stationFeatures: PointFeature[] = Object.values(
+          network.stations,
+        ).map((st) => ({
+          type: 'Feature',
+          properties: {
+            stationId: st.id,
+            isHub: st.lines.length >= 2,
+          },
+          geometry: {
+            type: 'Point',
+            coordinates: [st.lon, st.lat],
+          },
+        }));
+
+        const addHomeLineGroup = (
+          id: string,
+          features: LineStringFeature[],
+          width: number,
+          casingWidth: number,
+          opacity: number,
+        ) => {
+          map.addSource(id, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features },
+          });
+          map.addLayer({
+            id: `${id}-casing`,
+            type: 'line',
+            source: id,
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+            paint: {
+              'line-color': casingColor,
+              'line-width': casingWidth,
+              'line-opacity': opacity * (isSatellite ? 0.75 : 0.85),
+            },
+          });
+          map.addLayer({
+            id: `${id}-lines`,
+            type: 'line',
+            source: id,
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+            paint: {
+              'line-color': ['get', 'color'],
+              'line-width': width,
+              'line-opacity': opacity,
+            },
+          });
+        };
+
+        // Draw all Munich lines (Tram -> S-Bahn -> U-Bahn) with clean visual hierarchy
+        addHomeLineGroup(
+          'home-tram',
+          tramFeatures,
+          2,
+          3.8,
+          networkMode === 'ust' ? 0.9 : 0.6,
+        );
+        addHomeLineGroup('home-sbahn', sbahnFeatures, 2.8, 5, 0.92);
+        addHomeLineGroup('home-ubahn', ubahnFeatures, 3.6, 6, 0.98);
+
+        map.addSource('home-stations', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: stationFeatures },
+        });
+        map.addLayer({
+          id: 'home-stations',
+          type: 'circle',
+          source: 'home-stations',
+          paint: {
+            'circle-radius': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              9.5,
+              ['case', ['get', 'isHub'], 2.4, 1.4],
+              13,
+              ['case', ['get', 'isHub'], 4.5, 2.8],
+            ],
+            'circle-color': isSatellite
+              ? '#ffffff'
+              : isDark
+                ? '#18181b'
+                : '#ffffff',
+            'circle-stroke-color': isSatellite
+              ? '#18181b'
+              : isDark
+                ? '#e4e4e7'
+                : '#27272a',
+            'circle-stroke-width': ['case', ['get', 'isHub'], 1.8, 1.2],
+          },
+        });
+
+        const cameraKey = 'home';
+        if (cameraKey !== lastCameraKeyRef.current) {
+          lastCameraKeyRef.current = cameraKey;
+          const isDesktop = window.innerWidth >= 768;
+          map.easeTo({
+            center: MUNICH_CENTER,
+            zoom: isDesktop ? 11.6 : 10.7,
+            padding: isDesktop
+              ? { top: 40, bottom: 40, left: 420, right: 40 }
+              : { top: 64, bottom: 340, left: 16, right: 16 },
+            duration: 650,
+          });
+        }
+        return;
+      }
+
+      const fromSt = network.stations[fromStationId];
+      const toSt = network.stations[toStationId];
+      if (!fromSt || !toSt) return;
 
       const bounds = new maplibregl.LngLatBounds();
       bounds.extend([fromSt.lon, fromSt.lat]);
@@ -308,8 +517,8 @@ export function MapView({
           source: 'network-context',
           paint: {
             'line-color': ['get', 'color'],
-            'line-width': 1.5,
-            'line-opacity': isDark ? 0.18 : 0.16,
+            'line-width': isSatellite ? 2 : 1.5,
+            'line-opacity': isSatellite ? 0.35 : isDark ? 0.2 : 0.16,
           },
         });
 
@@ -318,8 +527,6 @@ export function MapView({
         const showPlayer =
           playerRoute !== null &&
           (highlightedRoute === 'both' || highlightedRoute === 'player');
-
-        const casingColor = isDark ? '#09090b' : '#ffffff';
 
         // Optimal route layer
         if (showOptimal) {
@@ -341,7 +548,7 @@ export function MapView({
             paint: {
               'line-color': casingColor,
               'line-width': showPlayer ? 8 : 9,
-              'line-opacity': showPlayer ? 0.75 : 0.95,
+              'line-opacity': showPlayer ? 0.8 : 0.95,
             },
           });
           map.addLayer({
@@ -353,7 +560,7 @@ export function MapView({
               'line-color': ['get', 'color'],
               'line-width': showPlayer ? 4.5 : 5.5,
               'line-dasharray': showPlayer ? [2.2, 1.6] : [1],
-              'line-opacity': showPlayer ? 0.85 : 1,
+              'line-opacity': showPlayer ? 0.88 : 1,
             },
           });
         }
@@ -414,7 +621,7 @@ export function MapView({
           source: 'route-stops',
           paint: {
             'circle-radius': ['case', ['get', 'isTransfer'], 5.5, 3.5],
-            'circle-color': isDark ? '#18181b' : '#ffffff',
+            'circle-color': isSatellite ? '#ffffff' : isDark ? '#18181b' : '#ffffff',
             'circle-stroke-color': ['get', 'color'],
             'circle-stroke-width': ['case', ['get', 'isTransfer'], 3, 2],
           },
@@ -471,29 +678,43 @@ export function MapView({
 
       markersRef.current.push(startMarker, endMarker);
 
-      // Fit viewport cleanly accounting for the floating panel
-      const isDesktop = window.innerWidth >= 768;
-      map.fitBounds(bounds, {
-        padding: isDesktop
-          ? { top: 96, bottom: 72, left: 450, right: 80 }
-          : { top: 88, bottom: 380, left: 48, right: 48 },
-        maxZoom: isRevealed ? 13.5 : 12.6,
-        duration: 650,
-      });
+      // Only refit viewport when the puzzle or reveal/route highlight changes (not on basemap toggles)
+      const cameraKey = `play|${fromStationId}|${toStationId}|${isRevealed}|${highlightedRoute}`;
+      if (cameraKey !== lastCameraKeyRef.current) {
+        lastCameraKeyRef.current = cameraKey;
+        const isDesktop = window.innerWidth >= 768;
+        map.fitBounds(bounds, {
+          padding: isDesktop
+            ? { top: 96, bottom: 72, left: 450, right: 80 }
+            : { top: 88, bottom: 380, left: 48, right: 48 },
+          maxZoom: isRevealed ? 13.5 : 12.6,
+          duration: 650,
+        });
+      }
     };
 
-    if (map.isStyleLoaded()) {
+    const onStyleLoad = () => {
+      styleReadyRef.current = true;
       renderOverlays();
-    } else {
-      map.once('load', renderOverlays);
-      map.once('style.load', renderOverlays);
+    };
+
+    map.on('style.load', onStyleLoad);
+
+    if (styleReadyRef.current && map.isStyleLoaded()) {
+      renderOverlays();
     }
+
+    return () => {
+      map.off('style.load', onStyleLoad);
+    };
   }, [
     network,
     networkMode,
     fromStationId,
     toStationId,
     isDark,
+    mapStyleMode,
+    isHome,
     isRevealed,
     playerRoute,
     optimalRoute,
