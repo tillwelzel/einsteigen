@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
   Check,
+  ChevronDown,
   ChevronRight,
   Clock,
   Delete,
@@ -10,22 +12,29 @@ import {
   MapPin,
   RefreshCw,
   RotateCcw,
+  Shuffle,
+  SlidersHorizontal,
   Sparkles,
+  TramFront,
   Trophy,
 } from 'lucide-react';
 import { sortLineIds } from '../data/mvg-colors';
 import { DAILY_ROUNDS_COUNT } from '../engine/puzzle-generator';
 import type { Translations } from '../i18n';
-import type {
-  AttemptRecord,
-  CompletedRound,
-  ComputedRoute,
-  DailyProgress,
-  GameMode,
-  MunichNetwork,
-  NetworkMode,
-  Puzzle,
-  RoundGrade,
+import {
+  ALL_MVV_ZONES,
+  type AttemptRecord,
+  type CompletedRound,
+  type ComputedRoute,
+  type DailyProgress,
+  type FreePlayConfig,
+  type FreePlayDifficulty,
+  type GameMode,
+  type MunichNetwork,
+  type MvvZone,
+  type NetworkMode,
+  type Puzzle,
+  type RoundGrade,
 } from '../types';
 import { LineBadge } from './LineBadge';
 
@@ -34,6 +43,10 @@ interface GamePanelProps {
   network: MunichNetwork;
   gameMode: GameMode;
   networkMode: NetworkMode;
+  onChangeNetworkMode: (mode: NetworkMode) => void;
+  freePlayConfig: FreePlayConfig;
+  onUpdateFreePlayConfig: (patch: Partial<FreePlayConfig>) => void;
+  freePlayStationCount: number;
   puzzle: Puzzle;
   dailyIndex: number;
   dailyProgress: DailyProgress;
@@ -190,6 +203,10 @@ export function GamePanel({
   network,
   gameMode,
   networkMode,
+  onChangeNetworkMode,
+  freePlayConfig,
+  onUpdateFreePlayConfig,
+  freePlayStationCount,
   puzzle,
   dailyIndex,
   dailyProgress,
@@ -209,8 +226,38 @@ export function GamePanel({
   highlightedRoute,
   onChangeHighlightedRoute,
 }: GamePanelProps) {
+  const [showFreeOptions, setShowFreeOptions] = useState(false);
+
   const fromSt = network.stations[puzzle.fromStationId];
   const toSt = network.stations[puzzle.toStationId];
+
+  const isAllZones = freePlayConfig.zones.length === ALL_MVV_ZONES.length;
+
+  const handleToggleZone = (zone: MvvZone) => {
+    if (isAllZones) {
+      // Switching from "All" to a specific zone isolates that zone first
+      onUpdateFreePlayConfig({ zones: [zone] });
+      return;
+    }
+    const exists = freePlayConfig.zones.includes(zone);
+    if (exists) {
+      const next = freePlayConfig.zones.filter((z) => z !== zone);
+      onUpdateFreePlayConfig({
+        zones: next.length > 0 ? next : [...ALL_MVV_ZONES],
+      });
+    } else {
+      onUpdateFreePlayConfig({
+        zones: [...freePlayConfig.zones, zone],
+      });
+    }
+  };
+
+  const difficultyOptions: { value: FreePlayDifficulty; label: string }[] = [
+    { value: 'any', label: t.freePlayDifficultyAny },
+    { value: 'easy', label: t.difficulty.easy },
+    { value: 'medium', label: t.difficulty.medium },
+    { value: 'hard', label: t.difficulty.hard },
+  ];
 
   const allLineIds = sortLineIds(Object.keys(network.lines));
   const ubahnLines = allLineIds.filter((id) => network.lines[id].mode === 'ubahn');
@@ -279,6 +326,186 @@ export function GamePanel({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Top controls strip for Free Play mode */}
+      {gameMode === 'free' && (
+        <div className="border-b border-zinc-100 dark:border-zinc-800/80">
+          <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-2">
+            {/* Active filter summary pills (clicking opens options) */}
+            <button
+              type="button"
+              onClick={() => setShowFreeOptions((v) => !v)}
+              className="flex flex-wrap items-center gap-1.5 min-w-0 text-left cursor-pointer group"
+              aria-expanded={showFreeOptions}
+            >
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 group-hover:bg-zinc-200/80 dark:group-hover:bg-zinc-700/80 transition-colors">
+                {isAllZones
+                  ? t.freePlayAllZones
+                  : t.freePlayZonesSummary(freePlayConfig.zones)}
+              </span>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 group-hover:bg-zinc-200/80 dark:group-hover:bg-zinc-700/80 transition-colors">
+                {freePlayConfig.difficulty === 'any'
+                  ? t.difficulty[puzzle.difficulty]
+                  : t.difficulty[freePlayConfig.difficulty]}
+              </span>
+              <span
+                className={`text-[11px] font-bold px-2 py-0.5 rounded-full transition-colors ${
+                  networkMode === 'ust'
+                    ? 'bg-[#e30613]/15 text-[#e30613] dark:text-red-400'
+                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                }`}
+              >
+                {networkMode === 'ust' ? '+Tram' : t.modeUS}
+              </span>
+            </button>
+
+            {/* Right controls: New trip + Options toggle */}
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={onNextRound}
+                className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                title={t.newRound}
+                aria-label={t.newRound}
+              >
+                <Shuffle className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowFreeOptions((v) => !v)}
+                aria-expanded={showFreeOptions}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                  showFreeOptions
+                    ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950'
+                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/80'
+                }`}
+              >
+                <SlidersHorizontal className="w-3 h-3" />
+                <span>{t.freePlayFilters}</span>
+                <ChevronDown
+                  className={`w-3 h-3 transition-transform duration-150 ${
+                    showFreeOptions ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Collapsible Free Play Filter Drawer */}
+          {showFreeOptions && (
+            <div className="px-4 pb-3 pt-1 space-y-2.5 bg-zinc-50/80 dark:bg-zinc-950/40 border-t border-zinc-100 dark:border-zinc-800/80">
+              {/* Zones Multi-Select */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                    {t.freePlayZonesLabel}
+                  </span>
+                  <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 tabular-nums">
+                    {t.freePlayStationsCount(freePlayStationCount)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateFreePlayConfig({ zones: [...ALL_MVV_ZONES] })
+                    }
+                    aria-pressed={isAllZones}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      isAllZones
+                        ? 'bg-[#0065ae] text-white shadow-xs'
+                        : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700'
+                    }`}
+                  >
+                    {t.freePlayAllZones}
+                  </button>
+                  {ALL_MVV_ZONES.map((zone) => {
+                    const active =
+                      !isAllZones && freePlayConfig.zones.includes(zone);
+                    return (
+                      <button
+                        key={zone}
+                        type="button"
+                        onClick={() => handleToggleZone(zone)}
+                        aria-pressed={active}
+                        className={`flex-1 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          active
+                            ? 'bg-[#0065ae] text-white shadow-xs'
+                            : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700'
+                        }`}
+                      >
+                        {zone}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Difficulty Segmented Control */}
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
+                  {t.freePlayDifficultyLabel}
+                </div>
+                <div className="grid grid-cols-4 bg-zinc-200/70 dark:bg-zinc-900 p-0.5 rounded-xl gap-0.5 text-[11px] font-semibold">
+                  {difficultyOptions.map((opt) => {
+                    const active = freePlayConfig.difficulty === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() =>
+                          onUpdateFreePlayConfig({ difficulty: opt.value })
+                        }
+                        aria-pressed={active}
+                        className={`py-1 rounded-lg transition-all cursor-pointer ${
+                          active
+                            ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs'
+                            : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Include Tram Switch */}
+              <div className="flex items-center justify-between gap-2 pt-0.5">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200">
+                  <TramFront
+                    className={`w-3.5 h-3.5 ${
+                      networkMode === 'ust'
+                        ? 'text-[#e30613]'
+                        : 'text-zinc-400 dark:text-zinc-500'
+                    }`}
+                  />
+                  <span>{t.freePlayIncludeTram}</span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={networkMode === 'ust'}
+                  onClick={() =>
+                    onChangeNetworkMode(networkMode === 'ust' ? 'us' : 'ust')
+                  }
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
+                    networkMode === 'ust'
+                      ? 'bg-[#e30613]'
+                      : 'bg-zinc-300 dark:bg-zinc-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 rounded-full bg-white shadow-xs transition-transform ${
+                      networkMode === 'ust' ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -505,7 +732,9 @@ export function GamePanel({
                 {currentResult.playerRoute === null
                   ? t.noRouteSubmitted
                   : deltaMin !== null && deltaMin <= 0
-                    ? t.exactMatch
+                    ? sameLinesAsOptimal
+                      ? t.exactMatch
+                      : t.sameDurationTie
                     : deltaMin !== null
                       ? t.slowerBy(deltaMin)
                       : ''}

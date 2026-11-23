@@ -1,20 +1,19 @@
 import {
   BarChart3,
   HelpCircle,
-  Monitor,
   Moon,
   Sun,
   TrainFront,
 } from 'lucide-react';
 import type { Translations } from '../i18n';
-import type { GameMode, Locale, NetworkMode, ThemeSetting } from '../types';
+import type { GameMode, Locale, NetworkMode } from '../types';
 
 interface HeaderProps {
   t: Translations;
   locale: Locale;
   onToggleLocale: () => void;
-  themeSetting: ThemeSetting;
-  onCycleTheme: () => void;
+  isDark: boolean;
+  onToggleTheme: () => void;
   isHome: boolean;
   onGoHome: () => void;
   gameMode: GameMode;
@@ -29,8 +28,8 @@ export function Header({
   t,
   locale,
   onToggleLocale,
-  themeSetting,
-  onCycleTheme,
+  isDark,
+  onToggleTheme,
   isHome,
   onGoHome,
   gameMode,
@@ -40,8 +39,7 @@ export function Header({
   onOpenStats,
   onOpenHelp,
 }: HeaderProps) {
-  const ThemeIcon =
-    themeSetting === 'dark' ? Moon : themeSetting === 'light' ? Sun : Monitor;
+  const ThemeIcon = isDark ? Sun : Moon;
 
   return (
     <header className="fixed top-3 inset-x-3 z-20 pointer-events-none flex items-center justify-between gap-2">
@@ -172,16 +170,10 @@ export function Header({
 
         <button
           type="button"
-          onClick={onCycleTheme}
+          onClick={onToggleTheme}
           className="p-2 rounded-xl text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
           aria-label="Toggle theme"
-          title={
-            themeSetting === 'dark'
-              ? t.themeDark
-              : themeSetting === 'light'
-                ? t.themeLight
-                : t.themeAuto
-          }
+          title={isDark ? t.themeLight : t.themeDark}
         >
           <ThemeIcon className="w-4 h-4" />
         </button>

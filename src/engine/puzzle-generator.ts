@@ -1,8 +1,34 @@
-import type { NetworkMode, Puzzle } from '../types';
+import {
+  ALL_MVV_ZONES,
+  type FreePlayDifficulty,
+  type MvvZone,
+  type NetworkMode,
+  type Puzzle,
+  type Station,
+} from '../types';
 import type { TransitGraph } from './graph';
 import { findOptimalRoute } from './router';
 
 export const DAILY_ROUNDS_COUNT = 5;
+
+export interface FreePlayOptions {
+  zones?: MvvZone[];
+  difficulty?: FreePlayDifficulty;
+}
+
+/**
+ * Checks whether a station belongs to at least one of the selected MVV zones.
+ * Boundary stations like "M/1" belong to both Zone M and Zone 1.
+ */
+export function isStationInZones(
+  station: Station | undefined,
+  allowedZones: ReadonlySet<MvvZone>,
+): boolean {
+  if (!station) return false;
+  return station.zone
+    .split('/')
+    .some((part) => allowedZones.has(part as MvvZone));
+}
 
 /** Returns YYYY-MM-DD in Europe/Berlin timezone so everyone in Munich gets the same daily reset at midnight. */
 export function getBerlinDateKey(date: Date = new Date()): string {
@@ -41,8 +67,9 @@ interface RoundSpec {
   minTransfers: number;
   maxTransfers: number;
   minStops: number;
-  zoneMPreference: 'both' | 'at_least_one' | 'encourage_outer';
+  zoneMPreference: 'both' | 'at_least_one' | 'encourage_outer' | 'any';
   preferTram: boolean;
+  allowedZones?: ReadonlySet<MvvZone>;
 }
 
 function getDailySpecs(mode: NetworkMode): RoundSpec[] {
@@ -104,40 +131,56 @@ function generateSinglePuzzle(
   roundNumber?: number,
 ): Puzzle {
   const allStations = graph.activeStationIds;
-  const zoneMStations = allStations.filter(
+  const filteredStations =
+    spec.allowedZones && spec.allowedZones.size > 0
+      ? allStations.filter((id) =>
+          isStationInZones(graph.network.stations[id], spec.allowedZones!),
+        )
+      : allStations;
+  const eligibleStations =
+    filteredStations.length >= 2 ? filteredStations : allStations;
+
+  const zoneMStations = eligibleStations.filter(
     (id) => graph.network.stations[id].isZoneM,
   );
-  const outerStations = allStations.filter(
+  const outerStations = eligibleStations.filter(
     (id) => !graph.network.stations[id].isZoneM,
   );
-  const tramStations = allStations.filter((id) =>
+  const tramStations = eligibleStations.filter((id) =>
     graph.network.stations[id].modes.includes('tram'),
   );
+  const shouldPreferTram = spec.preferTram && tramStations.length >= 2;
 
-  // Try strict criteria first, then gradually relax if needed
+  // Try strict criteria first, then gradually relax transfer/stop thresholds if needed
+  // (while always honoring the user's selected zones).
   for (let pass = 0; pass < 3; pass++) {
     const maxAttempts = pass === 0 ? 450 : 300;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      let fromPool = zoneMStations.length > 10 ? zoneMStations : allStations;
-      let toPool = zoneMStations.length > 10 ? zoneMStations : allStations;
+      let fromPool = eligibleStations;
+      let toPool = eligibleStations;
 
-      if (spec.zoneMPreference === 'encourage_outer' && outerStations.length > 0) {
-        if (rng() < 0.65) {
-          if (rng() < 0.5) {
-            fromPool = outerStations;
-          } else {
-            toPool = outerStations;
+      if (spec.zoneMPreference !== 'any') {
+        fromPool = zoneMStations.length > 10 ? zoneMStations : eligibleStations;
+        toPool = zoneMStations.length > 10 ? zoneMStations : eligibleStations;
+
+        if (spec.zoneMPreference === 'encourage_outer' && outerStations.length > 0) {
+          if (rng() < 0.65) {
+            if (rng() < 0.5) {
+              fromPool = outerStations;
+            } else {
+              toPool = outerStations;
+            }
           }
+        } else if (
+          spec.zoneMPreference === 'at_least_one' &&
+          outerStations.length > 0 &&
+          rng() < 0.35
+        ) {
+          toPool = eligibleStations;
         }
-      } else if (
-        spec.zoneMPreference === 'at_least_one' &&
-        outerStations.length > 0 &&
-        rng() < 0.35
-      ) {
-        toPool = allStations;
       }
 
-      if (spec.preferTram && pass === 0 && tramStations.length > 5) {
+      if (shouldPreferTram && pass === 0 && tramStations.length > 5) {
         if (rng() < 0.7) {
           if (rng() < 0.5) {
             fromPool = tramStations;
@@ -172,7 +215,7 @@ function generateSinglePuzzle(
       if (optimal.transfers < minT || optimal.transfers > maxT) continue;
       if (optimal.totalStops < minS) continue;
 
-      if (spec.preferTram && pass === 0) {
+      if (shouldPreferTram && pass === 0) {
         const usesTram = optimal.lineIds.some(
           (id) => graph.network.lines[id]?.mode === 'tram',
         );
@@ -192,13 +235,13 @@ function generateSinglePuzzle(
     }
   }
 
-  // Ultimate fallback: any connected pair with >= 1 transfer
+  // Ultimate fallback: any connected pair inside eligibleStations with >= 1 transfer
   for (let i = 0; i < 500; i++) {
-    const fromId = pickFromPool(allStations, rng);
-    const toId = pickFromPool(allStations, rng);
+    const fromId = pickFromPool(eligibleStations, rng);
+    const toId = pickFromPool(eligibleStations, rng);
     if (fromId === toId) continue;
     const optimal = findOptimalRoute(graph, fromId, toId);
-    if (optimal && optimal.transfers >= 1) {
+    if (optimal && (optimal.transfers >= 1 || i >= 350)) {
       return {
         id: puzzleId,
         fromStationId: fromId,
@@ -239,24 +282,40 @@ export function generateFreePlayPuzzle(
   graph: TransitGraph,
   mode: NetworkMode,
   seed: number = Date.now() ^ Math.floor(Math.random() * 0xffffffff),
+  options?: FreePlayOptions,
 ): Puzzle {
   const rng = createRng(seed);
+  const requestedDifficulty: FreePlayDifficulty = options?.difficulty ?? 'any';
   const roll = rng();
   const difficulty: 'easy' | 'medium' | 'hard' =
-    roll < 0.35 ? 'easy' : roll < 0.75 ? 'medium' : 'hard';
+    requestedDifficulty !== 'any'
+      ? requestedDifficulty
+      : roll < 0.35
+        ? 'easy'
+        : roll < 0.75
+          ? 'medium'
+          : 'hard';
+
+  const hasCustomZones =
+    options?.zones !== undefined &&
+    options.zones.length > 0 &&
+    options.zones.length < ALL_MVV_ZONES.length;
+  const allowedZones = hasCustomZones ? new Set(options!.zones!) : undefined;
 
   const spec: RoundSpec = {
     difficulty,
     minTransfers: difficulty === 'easy' ? 1 : difficulty === 'medium' ? 1 : 2,
     maxTransfers: difficulty === 'easy' ? 1 : difficulty === 'medium' ? 2 : 3,
-    minStops: difficulty === 'easy' ? 4 : 6,
-    zoneMPreference:
-      difficulty === 'hard'
+    minStops: difficulty === 'easy' ? 4 : difficulty === 'medium' ? 6 : 8,
+    zoneMPreference: hasCustomZones
+      ? 'any'
+      : difficulty === 'hard'
         ? 'encourage_outer'
         : difficulty === 'medium'
           ? 'at_least_one'
           : 'both',
     preferTram: mode === 'ust' && rng() < 0.5,
+    allowedZones,
   };
 
   return generateSinglePuzzle(

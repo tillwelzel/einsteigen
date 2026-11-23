@@ -10,6 +10,17 @@ export type ThemeSetting = 'auto' | 'light' | 'dark';
 
 export type MapStyleMode = 'standard' | 'satellite';
 
+export type MvvZone = 'M' | '1' | '2' | '3' | '4' | '5';
+
+export const ALL_MVV_ZONES: MvvZone[] = ['M', '1', '2', '3', '4', '5'];
+
+export type FreePlayDifficulty = 'any' | 'easy' | 'medium' | 'hard';
+
+export interface FreePlayConfig {
+  zones: MvvZone[];
+  difficulty: FreePlayDifficulty;
+}
+
 export interface Station {
   id: string;
   name: string;

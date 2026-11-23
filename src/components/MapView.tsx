@@ -6,6 +6,7 @@ import type {
   MunichNetwork,
   NetworkMode,
 } from '../types';
+import { smoothPolyline, type LngLat } from '../utils/map-geometry';
 
 interface LineStringFeature {
   type: 'Feature';
@@ -13,15 +14,6 @@ interface LineStringFeature {
   geometry: {
     type: 'LineString';
     coordinates: [number, number][];
-  };
-}
-
-interface PointFeature {
-  type: 'Feature';
-  properties: Record<string, string | number | boolean>;
-  geometry: {
-    type: 'Point';
-    coordinates: [number, number];
   };
 }
 
@@ -39,12 +31,59 @@ interface MapViewProps {
   playerRoute: ComputedRoute | null;
   optimalRoute: ComputedRoute;
   highlightedRoute: 'both' | 'player' | 'optimal';
+  recenterTrigger: number;
+  onCanRecenterChange?: (canRecenter: boolean) => void;
+}
+
+interface CameraSnapshot {
+  center: maplibregl.LngLat;
+  zoom: number;
+  bearing: number;
+  pitch: number;
 }
 
 const MUNICH_CENTER: [number, number] = [11.5761, 48.1371];
 
 const OPENFREEMAP_LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/positron';
-const OPENFREEMAP_DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark';
+const OPENFREEMAP_DARK_STYLE = 'https://tiles.openfreemap.org/styles/fiord';
+
+function createCartoFallbackStyle(
+  isDark: boolean,
+  showLabels: boolean,
+): maplibregl.StyleSpecification {
+  const variant = isDark
+    ? showLabels
+      ? 'dark_all'
+      : 'dark_nolabels'
+    : showLabels
+      ? 'light_all'
+      : 'light_nolabels';
+  return {
+    version: 8,
+    sources: {
+      'carto-basemap': {
+        type: 'raster',
+        tiles: [
+          `https://a.basemaps.cartocdn.com/${variant}/{z}/{x}/{y}@2x.png`,
+          `https://b.basemaps.cartocdn.com/${variant}/{z}/{x}/{y}@2x.png`,
+          `https://c.basemaps.cartocdn.com/${variant}/{z}/{x}/{y}@2x.png`,
+        ],
+        tileSize: 256,
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>',
+      },
+    },
+    layers: [
+      {
+        id: 'carto-basemap-layer',
+        type: 'raster',
+        source: 'carto-basemap',
+        minzoom: 0,
+        maxzoom: 19,
+      },
+    ],
+  };
+}
 
 function createSatelliteStyle(): maplibregl.StyleSpecification {
   return {
@@ -72,17 +111,30 @@ function createSatelliteStyle(): maplibregl.StyleSpecification {
   };
 }
 
-function getBasemapKey(mapStyleMode: MapStyleMode, isDark: boolean): string {
+function getBasemapKey(
+  mapStyleMode: MapStyleMode,
+  isDark: boolean,
+  useCartoFallback: boolean,
+  showLabels: boolean,
+): string {
   if (mapStyleMode === 'satellite') return 'satellite';
+  if (useCartoFallback) {
+    return `carto-${isDark ? 'dark' : 'light'}-${showLabels ? 'labels' : 'nolabels'}`;
+  }
   return isDark ? 'standard-dark' : 'standard-light';
 }
 
 function getBasemapStyle(
   mapStyleMode: MapStyleMode,
   isDark: boolean,
+  useCartoFallback: boolean,
+  showLabels: boolean,
 ): string | maplibregl.StyleSpecification {
   if (mapStyleMode === 'satellite') {
     return createSatelliteStyle();
+  }
+  if (useCartoFallback) {
+    return createCartoFallbackStyle(isDark, showLabels);
   }
   return isDark ? OPENFREEMAP_DARK_STYLE : OPENFREEMAP_LIGHT_STYLE;
 }
@@ -111,7 +163,7 @@ function routeToLineFeatures(
       const coords = leg.stationIds
         .map((id) => network.stations[id])
         .filter(Boolean)
-        .map((st) => [st.lon, st.lat] as [number, number]);
+        .map((st) => [st.lon, st.lat] as LngLat);
       if (coords.length < 2) return null;
       const line = network.lines[leg.lineId];
       return {
@@ -123,53 +175,11 @@ function routeToLineFeatures(
         },
         geometry: {
           type: 'LineString' as const,
-          coordinates: coords,
+          coordinates: smoothPolyline(coords),
         },
       };
     })
     .filter((f): f is NonNullable<typeof f> => f !== null);
-}
-
-function routeToStopFeatures(
-  network: MunichNetwork,
-  route: ComputedRoute,
-  role: 'player' | 'optimal',
-): PointFeature[] {
-  const seen = new Set<string>();
-  const features: PointFeature[] = [];
-
-  route.legs.forEach((leg, legIdx) => {
-    const line = network.lines[leg.lineId];
-    leg.stationIds.forEach((stId, stIdx) => {
-      const isTransfer = legIdx > 0 && stIdx === 0;
-      const isEndpoint =
-        (legIdx === 0 && stIdx === 0) ||
-        (legIdx === route.legs.length - 1 && stIdx === leg.stationIds.length - 1);
-      if (isEndpoint) return;
-      const key = `${stId}:${isTransfer ? 't' : 's'}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-
-      const st = network.stations[stId];
-      if (!st) return;
-      features.push({
-        type: 'Feature',
-        properties: {
-          stationId: stId,
-          name: st.name,
-          color: line?.color ?? '#0065ae',
-          isTransfer,
-          role,
-        },
-        geometry: {
-          type: 'Point',
-          coordinates: [st.lon, st.lat],
-        },
-      });
-    });
-  });
-
-  return features;
 }
 
 function createMarkerSvg(kind: 'start' | 'end' | 'transfer'): SVGSVGElement {
@@ -267,9 +277,8 @@ function createPinElement(
 
   if (kind !== 'transfer') {
     const pulse = document.createElement('span');
-    pulse.className = `absolute w-9 h-9 rounded-full animate-pulse-ring ${
-      kind === 'start' ? 'bg-emerald-500/45' : 'bg-rose-500/45'
-    }`;
+    pulse.className = `absolute w-9 h-9 rounded-full animate-pulse-ring ${kind === 'start' ? 'bg-emerald-500/45' : 'bg-rose-500/45'
+      }`;
     dotWrap.appendChild(pulse);
   }
 
@@ -278,9 +287,8 @@ function createPinElement(
     dot.className =
       'w-3.5 h-3.5 rounded-full bg-white dark:bg-zinc-950 border-[3px] border-zinc-900 dark:border-white shadow-md';
   } else {
-    dot.className = `relative w-7 h-7 rounded-full border-[2.5px] border-white dark:border-zinc-950 shadow-lg shadow-black/30 text-white flex items-center justify-center ${
-      kind === 'start' ? 'bg-emerald-600' : 'bg-rose-600'
-    }`;
+    dot.className = `relative w-7 h-7 rounded-full border-[2.5px] border-white dark:border-zinc-950 shadow-lg shadow-black/30 text-white flex items-center justify-center ${kind === 'start' ? 'bg-emerald-600' : 'bg-rose-600'
+      }`;
     dot.appendChild(createMarkerSvg(kind));
   }
   dotWrap.appendChild(dot);
@@ -303,14 +311,30 @@ export function MapView({
   playerRoute,
   optimalRoute,
   highlightedRoute,
+  recenterTrigger,
+  onCanRecenterChange,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const styleReadyRef = useRef(false);
   const styleKeyRef = useRef<string>('');
+  const useCartoFallbackRef = useRef(false);
   const lastCameraKeyRef = useRef<string>('');
-  const renderOverlaysRef = useRef<() => void>(() => {});
+  const renderOverlaysRef = useRef<() => void>(() => { });
+  const recenterCameraRef = useRef<(() => void) | null>(null);
+  const defaultCameraRef = useRef<CameraSnapshot | null>(null);
+  const isProgrammaticMoveRef = useRef(false);
+  const lastReportedMovedRef = useRef(false);
+  const onCanRecenterChangeRef = useRef(onCanRecenterChange);
+  const mapStyleModeRef = useRef(mapStyleMode);
+  const isDarkRef = useRef(isDark);
+  const showLabelsRef = useRef(isHome || isRevealed);
+
+  onCanRecenterChangeRef.current = onCanRecenterChange;
+  mapStyleModeRef.current = mapStyleMode;
+  isDarkRef.current = isDark;
+  showLabelsRef.current = isHome || isRevealed;
 
   // Initialize MapLibre instance (attach style.load before any setStyle call)
   useEffect(() => {
@@ -319,6 +343,28 @@ export function MapView({
     styleReadyRef.current = false;
     styleKeyRef.current = '';
     lastCameraKeyRef.current = '';
+    defaultCameraRef.current = null;
+    isProgrammaticMoveRef.current = false;
+    lastReportedMovedRef.current = false;
+    onCanRecenterChangeRef.current?.(false);
+
+    const reportMovedAway = (moved: boolean) => {
+      if (moved === lastReportedMovedRef.current) return;
+      lastReportedMovedRef.current = moved;
+      onCanRecenterChangeRef.current?.(moved);
+    };
+
+    const hasMovedFromDefault = (m: maplibregl.Map): boolean => {
+      const def = defaultCameraRef.current;
+      if (!def) return true;
+      const curPx = m.project(m.getCenter());
+      const defPx = m.project(def.center);
+      const distPx = Math.hypot(curPx.x - defPx.x, curPx.y - defPx.y);
+      const zoomDelta = Math.abs(m.getZoom() - def.zoom);
+      const bearingDelta = Math.abs(m.getBearing() - def.bearing);
+      const pitchDelta = Math.abs(m.getPitch() - def.pitch);
+      return distPx > 28 || zoomDelta > 0.35 || bearingDelta > 2 || pitchDelta > 2;
+    };
 
     const map = new maplibregl.Map({
       container: containerRef.current,
@@ -334,9 +380,70 @@ export function MapView({
       'bottom-right',
     );
 
+    map.on('movestart', (e) => {
+      const isAutoFit = Boolean((e as { isAutoFit?: boolean }).isAutoFit);
+      if (!isAutoFit) {
+        isProgrammaticMoveRef.current = false;
+      }
+    });
+
+    map.on('move', (e) => {
+      const isAutoFit = Boolean((e as { isAutoFit?: boolean }).isAutoFit);
+      if (isAutoFit || isProgrammaticMoveRef.current) return;
+      reportMovedAway(hasMovedFromDefault(map));
+    });
+
+    map.on('moveend', (e) => {
+      const isAutoFit = Boolean((e as { isAutoFit?: boolean }).isAutoFit);
+      if (isAutoFit) {
+        if (!defaultCameraRef.current) {
+          defaultCameraRef.current = {
+            center: map.getCenter(),
+            zoom: map.getZoom(),
+            bearing: map.getBearing(),
+            pitch: map.getPitch(),
+          };
+        }
+        isProgrammaticMoveRef.current = false;
+        reportMovedAway(hasMovedFromDefault(map));
+        return;
+      }
+      if (!isProgrammaticMoveRef.current) {
+        reportMovedAway(hasMovedFromDefault(map));
+      }
+    });
+
     map.on('style.load', () => {
       styleReadyRef.current = true;
+      map.resize();
       renderOverlaysRef.current();
+    });
+
+    // If OpenFreeMap style fails to load (e.g. blocked/unreachable), automatically fall back to CARTO tiles
+    map.on('error', () => {
+      if (
+        mapStyleModeRef.current === 'standard' &&
+        !useCartoFallbackRef.current &&
+        !styleReadyRef.current
+      ) {
+        useCartoFallbackRef.current = true;
+        const fallbackKey = getBasemapKey(
+          'standard',
+          isDarkRef.current,
+          true,
+          showLabelsRef.current,
+        );
+        styleKeyRef.current = fallbackKey;
+        map.setStyle(
+          getBasemapStyle(
+            'standard',
+            isDarkRef.current,
+            true,
+            showLabelsRef.current,
+          ),
+          { diff: false },
+        );
+      }
     });
 
     mapRef.current = map;
@@ -344,6 +451,8 @@ export function MapView({
     return () => {
       styleReadyRef.current = false;
       styleKeyRef.current = '';
+      recenterCameraRef.current = null;
+      defaultCameraRef.current = null;
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
       map.remove();
@@ -357,7 +466,7 @@ export function MapView({
     if (!map) return;
 
     const renderOverlays = () => {
-      if (mapStyleMode === 'standard') {
+      if (mapStyleMode === 'standard' && !useCartoFallbackRef.current) {
         setBasemapLabelsVisibility(map, isHome || isRevealed);
       }
 
@@ -373,13 +482,11 @@ export function MapView({
         'home-sbahn-lines',
         'home-ubahn-casing',
         'home-ubahn-lines',
-        'home-stations',
         'network-context-lines',
         'optimal-casing',
         'optimal-line',
         'player-casing',
         'player-line',
-        'route-stops',
       ];
       for (const lid of layerIds) {
         if (map.getLayer(lid)) map.removeLayer(lid);
@@ -388,11 +495,9 @@ export function MapView({
         'home-tram',
         'home-sbahn',
         'home-ubahn',
-        'home-stations',
         'network-context',
         'optimal-route',
         'player-route',
-        'route-stops',
       ];
       for (const sid of sourceIds) {
         if (map.getSource(sid)) map.removeSource(sid);
@@ -411,6 +516,7 @@ export function MapView({
         const ubahnFeatures: LineStringFeature[] = [];
 
         for (const line of Object.values(network.lines)) {
+          if (networkMode === 'us' && line.mode === 'tram') continue;
           const target =
             line.mode === 'ubahn'
               ? ubahnFeatures
@@ -421,7 +527,7 @@ export function MapView({
             const coords = branch
               .map((id) => network.stations[id])
               .filter(Boolean)
-              .map((st) => [st.lon, st.lat] as [number, number]);
+              .map((st) => [st.lon, st.lat] as LngLat);
             if (coords.length >= 2) {
               target.push({
                 type: 'Feature',
@@ -430,25 +536,14 @@ export function MapView({
                   color: line.color,
                   mode: line.mode,
                 },
-                geometry: { type: 'LineString', coordinates: coords },
+                geometry: {
+                  type: 'LineString',
+                  coordinates: smoothPolyline(coords),
+                },
               });
             }
           }
         }
-
-        const stationFeatures: PointFeature[] = Object.values(
-          network.stations,
-        ).map((st) => ({
-          type: 'Feature',
-          properties: {
-            stationId: st.id,
-            isHub: st.lines.length >= 2,
-          },
-          geometry: {
-            type: 'Point',
-            coordinates: [st.lon, st.lat],
-          },
-        }));
 
         const addHomeLineGroup = (
           id: string,
@@ -485,61 +580,48 @@ export function MapView({
           });
         };
 
-        // Draw all Munich lines (Tram -> S-Bahn -> U-Bahn) with clean visual hierarchy
-        addHomeLineGroup(
-          'home-tram',
-          tramFeatures,
-          2,
-          3.8,
-          networkMode === 'ust' ? 0.9 : 0.6,
-        );
+        // Draw active Munich lines (Tram -> S-Bahn -> U-Bahn) with clean visual hierarchy
+        if (networkMode === 'ust') {
+          addHomeLineGroup('home-tram', tramFeatures, 2, 3.8, 0.9);
+        }
         addHomeLineGroup('home-sbahn', sbahnFeatures, 2.8, 5, 0.92);
         addHomeLineGroup('home-ubahn', ubahnFeatures, 3.6, 6, 0.98);
 
-        map.addSource('home-stations', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: stationFeatures },
-        });
-        map.addLayer({
-          id: 'home-stations',
-          type: 'circle',
-          source: 'home-stations',
-          paint: {
-            'circle-radius': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              9.5,
-              ['case', ['get', 'isHub'], 2.4, 1.4],
-              13,
-              ['case', ['get', 'isHub'], 4.5, 2.8],
-            ],
-            'circle-color': isSatellite
-              ? '#ffffff'
-              : isDark
-                ? '#18181b'
-                : '#ffffff',
-            'circle-stroke-color': isSatellite
-              ? '#18181b'
-              : isDark
-                ? '#e4e4e7'
-                : '#27272a',
-            'circle-stroke-width': ['case', ['get', 'isHub'], 1.8, 1.2],
-          },
-        });
+        const applyHomeCamera = (duration = 650) => {
+          const isDesktop = window.innerWidth >= 768;
+          const zoom = isDesktop ? 11.6 : 10.7;
+          const padding = isDesktop
+            ? { top: 40, bottom: 40, left: 420, right: 40 }
+            : { top: 64, bottom: 340, left: 16, right: 16 };
+          defaultCameraRef.current = {
+            center: new maplibregl.LngLat(MUNICH_CENTER[0], MUNICH_CENTER[1]),
+            zoom,
+            bearing: 0,
+            pitch: 0,
+          };
+          isProgrammaticMoveRef.current = true;
+          if (lastReportedMovedRef.current) {
+            lastReportedMovedRef.current = false;
+            onCanRecenterChangeRef.current?.(false);
+          }
+          map.easeTo(
+            {
+              center: MUNICH_CENTER,
+              zoom,
+              bearing: 0,
+              pitch: 0,
+              padding,
+              duration,
+            },
+            { isAutoFit: true },
+          );
+        };
+        recenterCameraRef.current = () => applyHomeCamera(550);
 
         const cameraKey = 'home';
         if (cameraKey !== lastCameraKeyRef.current) {
           lastCameraKeyRef.current = cameraKey;
-          const isDesktop = window.innerWidth >= 768;
-          map.easeTo({
-            center: MUNICH_CENTER,
-            zoom: isDesktop ? 11.6 : 10.7,
-            padding: isDesktop
-              ? { top: 40, bottom: 40, left: 420, right: 40 }
-              : { top: 64, bottom: 340, left: 16, right: 16 },
-            duration: 650,
-          });
+          applyHomeCamera(650);
         }
         return;
       }
@@ -561,12 +643,15 @@ export function MapView({
             const coords = branch
               .map((id) => network.stations[id])
               .filter(Boolean)
-              .map((st) => [st.lon, st.lat] as [number, number]);
+              .map((st) => [st.lon, st.lat] as LngLat);
             if (coords.length >= 2) {
               contextFeatures.push({
                 type: 'Feature',
                 properties: { color: line.color },
-                geometry: { type: 'LineString', coordinates: coords },
+                geometry: {
+                  type: 'LineString',
+                  coordinates: smoothPolyline(coords),
+                },
               });
             }
           }
@@ -580,6 +665,7 @@ export function MapView({
           id: 'network-context-lines',
           type: 'line',
           source: 'network-context',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
           paint: {
             'line-color': ['get', 'color'],
             'line-width': isSatellite ? 2 : 1.5,
@@ -666,32 +752,6 @@ export function MapView({
           });
         }
 
-        // Stop dots along the focused route(s)
-        const activeRouteForStops =
-          highlightedRoute === 'optimal' || !playerRoute
-            ? optimalRoute
-            : playerRoute;
-        const stopFeatures = routeToStopFeatures(
-          network,
-          activeRouteForStops,
-          highlightedRoute === 'optimal' ? 'optimal' : 'player',
-        );
-        map.addSource('route-stops', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: stopFeatures },
-        });
-        map.addLayer({
-          id: 'route-stops',
-          type: 'circle',
-          source: 'route-stops',
-          paint: {
-            'circle-radius': ['case', ['get', 'isTransfer'], 5.5, 3.5],
-            'circle-color': isSatellite ? '#ffffff' : isDark ? '#18181b' : '#ffffff',
-            'circle-stroke-color': ['get', 'color'],
-            'circle-stroke-width': ['case', ['get', 'isTransfer'], 3, 2],
-          },
-        });
-
         // Transfer hub markers with labels
         const transferStations = new Set<string>();
         const routesForTransfers =
@@ -743,28 +803,75 @@ export function MapView({
 
       markersRef.current.push(startMarker, endMarker);
 
+      const applyPlayCamera = (duration = 650) => {
+        const isDesktop = window.innerWidth >= 768;
+        const padding = isDesktop
+          ? { top: 96, bottom: 72, left: 450, right: 80 }
+          : { top: 88, bottom: 380, left: 48, right: 48 };
+        const maxZoom = isRevealed ? 13.5 : 12.6;
+        const target = map.cameraForBounds(bounds, {
+          padding,
+          maxZoom,
+          bearing: 0,
+        });
+        defaultCameraRef.current = target?.center
+          ? {
+            center: maplibregl.LngLat.convert(target.center),
+            zoom: target.zoom ?? maxZoom,
+            bearing: 0,
+            pitch: 0,
+          }
+          : null;
+        isProgrammaticMoveRef.current = true;
+        if (lastReportedMovedRef.current) {
+          lastReportedMovedRef.current = false;
+          onCanRecenterChangeRef.current?.(false);
+        }
+        map.fitBounds(
+          bounds,
+          {
+            padding,
+            maxZoom,
+            bearing: 0,
+            pitch: 0,
+            duration,
+          },
+          { isAutoFit: true },
+        );
+      };
+      recenterCameraRef.current = () => applyPlayCamera(550);
+
       // Only refit viewport when the puzzle or reveal/route highlight changes (not on basemap toggles)
       const cameraKey = `play|${fromStationId}|${toStationId}|${isRevealed}|${highlightedRoute}`;
       if (cameraKey !== lastCameraKeyRef.current) {
         lastCameraKeyRef.current = cameraKey;
-        const isDesktop = window.innerWidth >= 768;
-        map.fitBounds(bounds, {
-          padding: isDesktop
-            ? { top: 96, bottom: 72, left: 450, right: 80 }
-            : { top: 88, bottom: 380, left: 48, right: 48 },
-          maxZoom: isRevealed ? 13.5 : 12.6,
-          duration: 650,
-        });
+        applyPlayCamera(650);
       }
     };
 
     renderOverlaysRef.current = renderOverlays;
 
-    const nextKey = getBasemapKey(mapStyleMode, isDark);
+    const showLabels = isHome || isRevealed;
+    const nextKey = getBasemapKey(
+      mapStyleMode,
+      isDark,
+      useCartoFallbackRef.current,
+      showLabels,
+    );
     if (nextKey !== styleKeyRef.current) {
       styleKeyRef.current = nextKey;
       styleReadyRef.current = false;
-      map.setStyle(getBasemapStyle(mapStyleMode, isDark));
+      // Always disable style diffing so `style.load` fires reliably on every
+      // Light <-> Dark and Standard <-> Satellite transition.
+      map.setStyle(
+        getBasemapStyle(
+          mapStyleMode,
+          isDark,
+          useCartoFallbackRef.current,
+          showLabels,
+        ),
+        { diff: false },
+      );
     } else if (styleReadyRef.current) {
       renderOverlays();
     }
@@ -783,6 +890,12 @@ export function MapView({
     optimalRoute,
     highlightedRoute,
   ]);
+
+  // Trigger smooth recenter when requested by the user
+  useEffect(() => {
+    if (recenterTrigger === 0) return;
+    recenterCameraRef.current?.();
+  }, [recenterTrigger]);
 
   return (
     <div

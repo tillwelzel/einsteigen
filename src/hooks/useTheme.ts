@@ -41,9 +41,7 @@ export function useTheme() {
   }, [isDark, setting]);
 
   const cycleTheme = () => {
-    setSetting((prev) =>
-      prev === 'auto' ? 'light' : prev === 'light' ? 'dark' : 'auto',
-    );
+    setSetting(isDark ? 'light' : 'dark');
   };
 
   return { setting, setSetting, isDark, cycleTheme };

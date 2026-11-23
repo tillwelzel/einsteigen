@@ -6,17 +6,22 @@ import {
   generateDailyPuzzles,
   generateFreePlayPuzzle,
   getBerlinDateKey,
+  isStationInZones,
 } from '../engine/puzzle-generator';
 import { gradeRoute, validateLineSequence } from '../engine/validator';
-import type {
-  AttemptRecord,
-  CompletedRound,
-  DailyProgress,
-  GameMode,
-  MunichNetwork,
-  NetworkMode,
-  PlayerStats,
-  Puzzle,
+import {
+  ALL_MVV_ZONES,
+  type AttemptRecord,
+  type CompletedRound,
+  type DailyProgress,
+  type FreePlayConfig,
+  type FreePlayDifficulty,
+  type GameMode,
+  type MunichNetwork,
+  type MvvZone,
+  type NetworkMode,
+  type PlayerStats,
+  type Puzzle,
 } from '../types';
 
 export const MAX_ATTEMPTS = 3;
@@ -24,6 +29,42 @@ export const MAX_ATTEMPTS = 3;
 const DAILY_STORAGE_PREFIX = 'einsteigen-daily-v1:';
 const STATS_STORAGE_KEY = 'einsteigen-stats-v1';
 const NETWORK_MODE_KEY = 'einsteigen-network-mode';
+const FREE_PLAY_CONFIG_KEY = 'einsteigen-freeplay-config-v1';
+
+const DEFAULT_FREE_PLAY_CONFIG: FreePlayConfig = {
+  zones: [...ALL_MVV_ZONES],
+  difficulty: 'any',
+};
+
+function loadFreePlayConfig(): FreePlayConfig {
+  try {
+    const raw = localStorage.getItem(FREE_PLAY_CONFIG_KEY);
+    if (!raw) return DEFAULT_FREE_PLAY_CONFIG;
+    const parsed = JSON.parse(raw) as Partial<FreePlayConfig>;
+    const validZones = Array.isArray(parsed.zones)
+      ? ALL_MVV_ZONES.filter((z) => parsed.zones!.includes(z))
+      : [];
+    const difficulty: FreePlayDifficulty =
+      parsed.difficulty === 'easy' ||
+      parsed.difficulty === 'medium' ||
+      parsed.difficulty === 'hard' ||
+      parsed.difficulty === 'any'
+        ? parsed.difficulty
+        : 'any';
+    return {
+      zones: validZones.length > 0 ? validZones : [...ALL_MVV_ZONES],
+      difficulty,
+    };
+  } catch {
+    return DEFAULT_FREE_PLAY_CONFIG;
+  }
+}
+
+function saveFreePlayConfig(config: FreePlayConfig) {
+  try {
+    localStorage.setItem(FREE_PLAY_CONFIG_KEY, JSON.stringify(config));
+  } catch {}
+}
 
 const DEFAULT_STATS: PlayerStats = {
   dailyCompleted: 0,
@@ -117,10 +158,19 @@ export function useGameState() {
     return Math.min(saved.rounds.length, DAILY_ROUNDS_COUNT - 1);
   });
 
+  const [freePlayConfig, setFreePlayConfig] =
+    useState<FreePlayConfig>(loadFreePlayConfig);
   const [freePuzzle, setFreePuzzle] = useState<Puzzle>(() =>
-    generateFreePlayPuzzle(graph, networkMode),
+    generateFreePlayPuzzle(graph, networkMode, undefined, loadFreePlayConfig()),
   );
   const [freeResult, setFreeResult] = useState<CompletedRound | null>(null);
+
+  const freePlayStationCount = useMemo(() => {
+    const zoneSet = new Set<MvvZone>(freePlayConfig.zones);
+    return graph.activeStationIds.filter((id) =>
+      isStationInZones(MUNICH_NETWORK.stations[id], zoneSet),
+    ).length;
+  }, [graph, freePlayConfig.zones]);
 
   const [selectedLines, setSelectedLines] = useState<string[]>([]);
   const [attempts, setAttempts] = useState<AttemptRecord[]>([]);
@@ -139,12 +189,35 @@ export function useGameState() {
       const nextProgress = loadDailyProgress(dateKey, nextMode);
       setDailyProgress(nextProgress);
       setDailyIndex(Math.min(nextProgress.rounds.length, DAILY_ROUNDS_COUNT - 1));
-      setFreePuzzle(generateFreePlayPuzzle(nextGraph, nextMode));
+      setFreePuzzle(
+        generateFreePlayPuzzle(nextGraph, nextMode, undefined, freePlayConfig),
+      );
       setFreeResult(null);
       setSelectedLines([]);
       setAttempts([]);
     },
-    [networkMode, dateKey],
+    [networkMode, dateKey, freePlayConfig],
+  );
+
+  const updateFreePlayConfig = useCallback(
+    (patch: Partial<FreePlayConfig>) => {
+      const nextZones = patch.zones
+        ? ALL_MVV_ZONES.filter((z) => patch.zones!.includes(z))
+        : freePlayConfig.zones;
+      const nextConfig: FreePlayConfig = {
+        zones: nextZones.length > 0 ? nextZones : [...ALL_MVV_ZONES],
+        difficulty: patch.difficulty ?? freePlayConfig.difficulty,
+      };
+      setFreePlayConfig(nextConfig);
+      saveFreePlayConfig(nextConfig);
+      setFreePuzzle(
+        generateFreePlayPuzzle(graph, networkMode, undefined, nextConfig),
+      );
+      setFreeResult(null);
+      setSelectedLines([]);
+      setAttempts([]);
+    },
+    [graph, networkMode, freePlayConfig],
   );
 
   const switchGameMode = useCallback((nextMode: GameMode) => {
@@ -327,7 +400,9 @@ export function useGameState() {
     setAttempts([]);
     if (gameMode === 'free') {
       setFreeResult(null);
-      setFreePuzzle(generateFreePlayPuzzle(graph, networkMode));
+      setFreePuzzle(
+        generateFreePlayPuzzle(graph, networkMode, undefined, freePlayConfig),
+      );
       return;
     }
     if (dailyIndex < DAILY_ROUNDS_COUNT - 1) {
@@ -335,7 +410,7 @@ export function useGameState() {
     } else {
       setShowSummaryModal(true);
     }
-  }, [gameMode, graph, networkMode, dailyIndex]);
+  }, [gameMode, graph, networkMode, dailyIndex, freePlayConfig]);
 
   const selectDailyRound = useCallback(
     (idx: number) => {
@@ -399,6 +474,9 @@ export function useGameState() {
     switchGameMode,
     networkMode,
     setNetworkMode,
+    freePlayConfig,
+    updateFreePlayConfig,
+    freePlayStationCount,
     dailyPuzzles,
     dailyProgress,
     dailyIndex,

@@ -7,8 +7,9 @@ import {
   DAILY_ROUNDS_COUNT,
   generateDailyPuzzles,
   generateFreePlayPuzzle,
+  isStationInZones,
 } from '../src/engine/puzzle-generator';
-import type { MunichNetwork } from '../src/types';
+import type { MunichNetwork, MvvZone } from '../src/types';
 
 const network = rawNetwork as unknown as MunichNetwork;
 
@@ -169,5 +170,33 @@ describe('Puzzle Generator', () => {
 
     const free = generateFreePlayPuzzle(usGraph, 'us', 123456);
     expect(free.optimalRoute.transfers).toBeGreaterThanOrEqual(1);
+  });
+
+  it('respects Free Play zone, difficulty, and tram filters', () => {
+    const onlyM = new Set<MvvZone>(['M']);
+    for (let seed = 1; seed <= 10; seed++) {
+      const p = generateFreePlayPuzzle(usGraph, 'us', seed * 997, {
+        zones: ['M'],
+        difficulty: 'easy',
+      });
+      expect(p.difficulty).toBe('easy');
+      expect(isStationInZones(network.stations[p.fromStationId], onlyM)).toBe(true);
+      expect(isStationInZones(network.stations[p.toStationId], onlyM)).toBe(true);
+      expect(p.optimalRoute.transfers).toBe(1);
+      expect(
+        p.optimalRoute.lineIds.every((id) => network.lines[id].mode !== 'tram'),
+      ).toBe(true);
+    }
+
+    const outerZones = new Set<MvvZone>(['3', '4', '5']);
+    for (let seed = 1; seed <= 8; seed++) {
+      const p = generateFreePlayPuzzle(ustGraph, 'ust', seed * 1337, {
+        zones: ['3', '4', '5'],
+        difficulty: 'hard',
+      });
+      expect(p.difficulty).toBe('hard');
+      expect(isStationInZones(network.stations[p.fromStationId], outerZones)).toBe(true);
+      expect(isStationInZones(network.stations[p.toStationId], outerZones)).toBe(true);
+    }
   });
 });

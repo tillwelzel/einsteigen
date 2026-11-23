@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Map as MapIcon, Satellite } from 'lucide-react';
+import { LocateFixed, Map as MapIcon, Satellite } from 'lucide-react';
 import { DailySummaryModal } from './components/DailySummaryModal';
 import { GamePanel } from './components/GamePanel';
 import { Header } from './components/Header';
@@ -15,7 +15,7 @@ import type { GameMode, MapStyleMode } from './types';
 const MAP_STYLE_STORAGE_KEY = 'einsteigen-map-style';
 
 export function App() {
-  const { setting: themeSetting, isDark, cycleTheme } = useTheme();
+  const { isDark, cycleTheme } = useTheme();
   const { locale, toggleLocale, t } = useLocale();
   const game = useGameState();
 
@@ -24,7 +24,7 @@ export function App() {
     try {
       const saved = localStorage.getItem(MAP_STYLE_STORAGE_KEY);
       if (saved === 'standard' || saved === 'satellite') return saved;
-    } catch {}
+    } catch { }
     return 'standard';
   });
   const [showStats, setShowStats] = useState(false);
@@ -32,11 +32,13 @@ export function App() {
   const [highlightedRoute, setHighlightedRoute] = useState<
     'both' | 'player' | 'optimal'
   >('both');
+  const [canRecenter, setCanRecenter] = useState(false);
+  const [recenterTrigger, setRecenterTrigger] = useState(0);
 
   useEffect(() => {
     try {
       localStorage.setItem(MAP_STYLE_STORAGE_KEY, mapStyleMode);
-    } catch {}
+    } catch { }
   }, [mapStyleMode]);
 
   // Reset route spotlight when puzzle changes
@@ -79,6 +81,8 @@ export function App() {
         playerRoute={game.currentResult?.playerRoute ?? null}
         optimalRoute={game.currentPuzzle.optimalRoute}
         highlightedRoute={highlightedRoute}
+        recenterTrigger={recenterTrigger}
+        onCanRecenterChange={setCanRecenter}
       />
 
       {/* Top floating bar */}
@@ -86,8 +90,8 @@ export function App() {
         t={t}
         locale={locale}
         onToggleLocale={toggleLocale}
-        themeSetting={themeSetting}
-        onCycleTheme={cycleTheme}
+        isDark={isDark}
+        onToggleTheme={cycleTheme}
         isHome={isHome}
         onGoHome={() => setIsHome(true)}
         gameMode={game.gameMode}
@@ -98,40 +102,56 @@ export function App() {
         onOpenHelp={() => setShowHelp(true)}
       />
 
-      {/* Standard / Satellite basemap toggle */}
-      <div
-        role="group"
-        aria-label={t.mapStyleAriaLabel}
-        className="fixed top-[4.4rem] right-3 z-20 flex items-center bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-1 shadow-lg shadow-black/5"
-      >
-        <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/90 p-0.5 rounded-xl text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setMapStyleMode('standard')}
-            aria-pressed={mapStyleMode === 'standard'}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-              mapStyleMode === 'standard'
-                ? 'bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white shadow-xs'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-            }`}
-          >
-            <MapIcon className="w-3.5 h-3.5" />
-            <span>{t.mapStyleStandard}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMapStyleMode('satellite')}
-            aria-pressed={mapStyleMode === 'satellite'}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-              mapStyleMode === 'satellite'
-                ? 'bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white shadow-xs'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-            }`}
-          >
-            <Satellite className="w-3.5 h-3.5" />
-            <span>{t.mapStyleSatellite}</span>
-          </button>
+      {/* Floating top-right map controls: basemap toggle + recenter button */}
+      <div className="fixed top-[4.4rem] right-3 z-20 flex flex-col items-end gap-2 pointer-events-none">
+        <div
+          role="group"
+          aria-label={t.mapStyleAriaLabel}
+          className="pointer-events-auto flex items-center bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-1 shadow-lg shadow-black/5"
+        >
+          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/90 p-0.5 rounded-xl text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setMapStyleMode('standard')}
+              aria-pressed={mapStyleMode === 'standard'}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${mapStyleMode === 'standard'
+                  ? 'bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white shadow-xs'
+                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+            >
+              <MapIcon className="w-3.5 h-3.5" />
+              <span>{t.mapStyleStandard}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMapStyleMode('satellite')}
+              aria-pressed={mapStyleMode === 'satellite'}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${mapStyleMode === 'satellite'
+                  ? 'bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white shadow-xs'
+                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+            >
+              <Satellite className="w-3.5 h-3.5" />
+              <span>{t.mapStyleSatellite}</span>
+            </button>
+          </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setRecenterTrigger((n) => n + 1)}
+          aria-label={isHome ? t.recenterMunichTitle : t.recenterStationsTitle}
+          title={isHome ? t.recenterMunichTitle : t.recenterStationsTitle}
+          tabIndex={canRecenter ? 0 : -1}
+          aria-hidden={!canRecenter}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-semibold bg-white/92 dark:bg-zinc-900/92 hover:bg-white dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-100 backdrop-blur-md border border-zinc-200/80 dark:border-zinc-800 shadow-lg shadow-black/10 active:scale-[0.97] transition-all duration-200 cursor-pointer ${canRecenter
+              ? 'pointer-events-auto opacity-100 translate-y-0 scale-100'
+              : 'pointer-events-none opacity-0 -translate-y-1.5 scale-95'
+            }`}
+        >
+          <LocateFixed className="w-3.5 h-3.5 text-[#0065ae] dark:text-sky-400 shrink-0" />
+          <span>{t.recenterMap}</span>
+        </button>
       </div>
 
       {/* Home Screen or Active Game Card */}
@@ -150,6 +170,10 @@ export function App() {
           network={game.network}
           gameMode={game.gameMode}
           networkMode={game.networkMode}
+          onChangeNetworkMode={game.setNetworkMode}
+          freePlayConfig={game.freePlayConfig}
+          onUpdateFreePlayConfig={game.updateFreePlayConfig}
+          freePlayStationCount={game.freePlayStationCount}
           puzzle={game.currentPuzzle}
           dailyIndex={game.dailyIndex}
           dailyProgress={game.dailyProgress}
@@ -179,6 +203,13 @@ export function App() {
         network={game.network}
         progress={game.dailyProgress}
         networkMode={game.networkMode}
+        stats={game.stats}
+        onInspectRound={(roundIndex) => {
+          game.switchGameMode('daily');
+          game.selectDailyRound(roundIndex);
+          game.setShowSummaryModal(false);
+          setIsHome(false);
+        }}
         onPlayFreePlay={() => game.switchGameMode('free')}
         onSwitchNetworkMode={game.setNetworkMode}
       />
