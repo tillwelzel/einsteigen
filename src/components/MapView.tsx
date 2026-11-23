@@ -30,6 +30,8 @@ interface MapViewProps {
   networkMode: NetworkMode;
   fromStationId: string;
   toStationId: string;
+  startLabel: string;
+  endLabel: string;
   isDark: boolean;
   mapStyleMode: MapStyleMode;
   isHome: boolean;
@@ -170,9 +172,63 @@ function routeToStopFeatures(
   return features;
 }
 
+function createMarkerSvg(kind: 'start' | 'end' | 'transfer'): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2.5');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+
+  if (kind === 'start') {
+    // Crisp departure play triangle
+    svg.setAttribute('class', 'w-3.5 h-3.5 translate-x-[0.5px]');
+    const poly = document.createElementNS(ns, 'polygon');
+    poly.setAttribute('points', '6 4 20 12 6 20 6 4');
+    poly.setAttribute('fill', 'currentColor');
+    svg.appendChild(poly);
+  } else if (kind === 'end') {
+    // Crisp destination flag icon
+    svg.setAttribute('class', 'w-3.5 h-3.5');
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute(
+      'd',
+      'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z',
+    );
+    path.setAttribute('fill', 'currentColor');
+    const pole = document.createElementNS(ns, 'line');
+    pole.setAttribute('x1', '4');
+    pole.setAttribute('x2', '4');
+    pole.setAttribute('y1', '22');
+    pole.setAttribute('y2', '15');
+    svg.appendChild(path);
+    svg.appendChild(pole);
+  } else {
+    // Transfer arrows
+    svg.setAttribute('class', 'w-3 h-3');
+    const paths = [
+      'M8 3 4 7l4 4',
+      'M4 7h16',
+      'm16 21 4-4-4-4',
+      'M20 17H4',
+    ];
+    for (const d of paths) {
+      const p = document.createElementNS(ns, 'path');
+      p.setAttribute('d', d);
+      svg.appendChild(p);
+    }
+  }
+
+  return svg;
+}
+
 function createPinElement(
   kind: 'start' | 'end' | 'transfer',
   label: string,
+  roleTag?: string,
 ): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'flex flex-col items-center pointer-events-none select-none';
@@ -180,15 +236,30 @@ function createPinElement(
   const pill = document.createElement('div');
   if (kind === 'transfer') {
     pill.className =
-      'mb-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-white/95 dark:bg-zinc-900/95 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 shadow-md whitespace-nowrap';
+      'mb-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-white/95 dark:bg-zinc-900/95 text-zinc-900 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-700 shadow-md whitespace-nowrap flex items-center gap-1';
+    pill.appendChild(createMarkerSvg('transfer'));
+    const text = document.createElement('span');
+    text.textContent = label;
+    pill.appendChild(text);
   } else {
     const badgeColor =
       kind === 'start'
-        ? 'bg-emerald-600 text-white border-emerald-400/50'
-        : 'bg-rose-600 text-white border-rose-400/50';
-    pill.className = `mb-1.5 px-2.5 py-1 rounded-lg text-xs font-bold shadow-lg border whitespace-nowrap ${badgeColor}`;
+        ? 'bg-emerald-600 text-white border-emerald-300/60'
+        : 'bg-rose-600 text-white border-rose-300/60';
+    pill.className = `mb-1.5 pl-1.5 pr-2.5 py-1 rounded-xl text-xs font-bold shadow-lg shadow-black/25 border whitespace-nowrap flex items-center gap-1.5 ${badgeColor}`;
+
+    if (roleTag) {
+      const tag = document.createElement('span');
+      tag.className =
+        'px-1.5 py-0.5 rounded-md bg-black/20 text-[10px] font-extrabold uppercase tracking-wider leading-none';
+      tag.textContent = roleTag;
+      pill.appendChild(tag);
+    }
+
+    const text = document.createElement('span');
+    text.textContent = label;
+    pill.appendChild(text);
   }
-  pill.textContent = label;
   wrapper.appendChild(pill);
 
   const dotWrap = document.createElement('div');
@@ -196,8 +267,8 @@ function createPinElement(
 
   if (kind !== 'transfer') {
     const pulse = document.createElement('span');
-    pulse.className = `absolute w-6 h-6 rounded-full animate-pulse-ring ${
-      kind === 'start' ? 'bg-emerald-500/50' : 'bg-rose-500/50'
+    pulse.className = `absolute w-9 h-9 rounded-full animate-pulse-ring ${
+      kind === 'start' ? 'bg-emerald-500/45' : 'bg-rose-500/45'
     }`;
     dotWrap.appendChild(pulse);
   }
@@ -207,9 +278,10 @@ function createPinElement(
     dot.className =
       'w-3.5 h-3.5 rounded-full bg-white dark:bg-zinc-950 border-[3px] border-zinc-900 dark:border-white shadow-md';
   } else {
-    dot.className = `w-4 h-4 rounded-full border-[3px] border-white dark:border-zinc-950 shadow-md ${
-      kind === 'start' ? 'bg-emerald-500' : 'bg-rose-500'
+    dot.className = `relative w-7 h-7 rounded-full border-[2.5px] border-white dark:border-zinc-950 shadow-lg shadow-black/30 text-white flex items-center justify-center ${
+      kind === 'start' ? 'bg-emerald-600' : 'bg-rose-600'
     }`;
+    dot.appendChild(createMarkerSvg(kind));
   }
   dotWrap.appendChild(dot);
   wrapper.appendChild(dotWrap);
@@ -222,6 +294,8 @@ export function MapView({
   networkMode,
   fromStationId,
   toStationId,
+  startLabel,
+  endLabel,
   isDark,
   mapStyleMode,
   isHome,
@@ -650,19 +724,19 @@ export function MapView({
         }
       }
 
-      // Start & End pins (always visible)
+      // Start & End icon pins (always visible)
       const startMarker = new maplibregl.Marker({
-        element: createPinElement('start', fromSt.name),
+        element: createPinElement('start', fromSt.name, startLabel),
         anchor: 'bottom',
-        offset: [0, 8],
+        offset: [0, 14],
       })
         .setLngLat([fromSt.lon, fromSt.lat])
         .addTo(map);
 
       const endMarker = new maplibregl.Marker({
-        element: createPinElement('end', toSt.name),
+        element: createPinElement('end', toSt.name, endLabel),
         anchor: 'bottom',
-        offset: [0, 8],
+        offset: [0, 14],
       })
         .setLngLat([toSt.lon, toSt.lat])
         .addTo(map);
@@ -699,6 +773,8 @@ export function MapView({
     networkMode,
     fromStationId,
     toStationId,
+    startLabel,
+    endLabel,
     isDark,
     mapStyleMode,
     isHome,

@@ -70,6 +70,8 @@ export function App() {
         networkMode={game.networkMode}
         fromStationId={game.currentPuzzle.fromStationId}
         toStationId={game.currentPuzzle.toStationId}
+        startLabel={t.from}
+        endLabel={t.to}
         isDark={isDark}
         mapStyleMode={mapStyleMode}
         isHome={isHome}
