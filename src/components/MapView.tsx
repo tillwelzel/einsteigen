@@ -6,7 +6,45 @@ import type {
   MunichNetwork,
   NetworkMode,
 } from '../types';
-import { smoothPolyline, type LngLat } from '../utils/map-geometry';
+import {
+  sliceMultiLegPolylines,
+  smoothPolyline,
+  type LngLat,
+} from '../utils/map-geometry';
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function buildSlicedFeatures(
+  fullFeatures: LineStringFeature[],
+  progress: number,
+): LineStringFeature[] {
+  const fullLegs = fullFeatures.map((f) => f.geometry.coordinates as LngLat[]);
+  const slicedLegs = sliceMultiLegPolylines(fullLegs, progress);
+  const out: LineStringFeature[] = [];
+  for (let i = 0; i < fullFeatures.length; i++) {
+    const coords = slicedLegs[i];
+    if (coords.length >= 2) {
+      out.push({
+        type: 'Feature',
+        properties: fullFeatures[i].properties,
+        geometry: {
+          type: 'LineString',
+          coordinates: coords,
+        },
+      });
+    }
+  }
+  return out;
+}
 
 interface LineStringFeature {
   type: 'Feature';
@@ -241,9 +279,25 @@ function createPinElement(
   kind: 'start' | 'end' | 'transfer',
   label: string,
   roleTag?: string,
+  animateDelayMs?: number,
 ): HTMLElement {
+  // Root element is owned by MapLibre for inline `transform: translate(...)` positioning;
+  // never animate `transform` directly on it.
+  const root = document.createElement('div');
+  root.className = 'pointer-events-none select-none';
+
   const wrapper = document.createElement('div');
-  wrapper.className = 'flex flex-col items-center pointer-events-none select-none';
+  const animClass =
+    animateDelayMs !== undefined
+      ? kind === 'transfer'
+        ? ' animate-transfer-pop'
+        : ' animate-pin-pop'
+      : '';
+  wrapper.className = `flex flex-col items-center${animClass}`;
+  if (animateDelayMs !== undefined && animateDelayMs > 0) {
+    wrapper.style.animationDelay = `${animateDelayMs}ms`;
+  }
+  root.appendChild(wrapper);
 
   const pill = document.createElement('div');
   if (kind === 'transfer') {
@@ -298,7 +352,7 @@ function createPinElement(
   dotWrap.appendChild(dot);
   wrapper.appendChild(dotWrap);
 
-  return wrapper;
+  return root;
 }
 
 function computeMobilePadding(
@@ -356,6 +410,9 @@ export function MapView({
   const showLabelsRef = useRef(isHome || isRevealed);
   const mobileBottomInsetRef = useRef(mobileBottomInset);
   const lastFittedInsetRef = useRef(0);
+  const routeAnimRafRef = useRef<number | null>(null);
+  const lastAnimatedRevealKeyRef = useRef<string>('');
+  const lastAnimatedPinsKeyRef = useRef<string>('');
 
   onCanRecenterChangeRef.current = onCanRecenterChange;
   mapStyleModeRef.current = mapStyleMode;
@@ -484,6 +541,10 @@ export function MapView({
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
+      if (routeAnimRafRef.current !== null) {
+        cancelAnimationFrame(routeAnimRafRef.current);
+        routeAnimRafRef.current = null;
+      }
       styleReadyRef.current = false;
       styleKeyRef.current = '';
       recenterCameraRef.current = null;
@@ -501,6 +562,11 @@ export function MapView({
     if (!map) return;
 
     const renderOverlays = () => {
+      if (routeAnimRafRef.current !== null) {
+        cancelAnimationFrame(routeAnimRafRef.current);
+        routeAnimRafRef.current = null;
+      }
+
       if (mapStyleMode === 'standard' && !useCartoFallbackRef.current) {
         setBasemapLabelsVisibility(map, isHome || isRevealed);
       }
@@ -546,6 +612,8 @@ export function MapView({
           : '#ffffff';
 
       if (isHome) {
+        lastAnimatedPinsKeyRef.current = '';
+        lastAnimatedRevealKeyRef.current = '';
         const tramFeatures: LineStringFeature[] = [];
         const sbahnFeatures: LineStringFeature[] = [];
         const ubahnFeatures: LineStringFeature[] = [];
@@ -628,10 +696,10 @@ export function MapView({
           const padding = isDesktop
             ? { top: 40, bottom: 40, left: 420, right: 40 }
             : computeMobilePadding(
-                window.innerHeight,
-                mobileBottomInsetRef.current,
-                true,
-              );
+              window.innerHeight,
+              mobileBottomInsetRef.current,
+              true,
+            );
           defaultCameraRef.current = {
             center: new maplibregl.LngLat(MUNICH_CENTER[0], MUNICH_CENTER[1]),
             zoom,
@@ -650,7 +718,8 @@ export function MapView({
               bearing: 0,
               pitch: 0,
               padding,
-              duration,
+              duration: prefersReducedMotion() ? 0 : duration,
+              easing: easeOutCubic,
             },
             { isAutoFit: true },
           );
@@ -674,6 +743,14 @@ export function MapView({
       bounds.extend([toSt.lon, toSt.lat]);
 
       if (isRevealed) {
+        const revealKey = `${fromStationId}|${toStationId}`;
+        const shouldAnimateReveal =
+          !prefersReducedMotion() &&
+          lastAnimatedRevealKeyRef.current !== revealKey;
+        if (shouldAnimateReveal) {
+          lastAnimatedRevealKeyRef.current = revealKey;
+        }
+
         // Subtle background network lines for spatial context
         const contextFeatures: LineStringFeature[] = [];
         for (const line of Object.values(network.lines)) {
@@ -718,17 +795,23 @@ export function MapView({
           playerRoute !== null &&
           (highlightedRoute === 'both' || highlightedRoute === 'player');
 
+        let optFullFeatures: LineStringFeature[] = [];
+        let playerFullFeatures: LineStringFeature[] = [];
+
         // Optimal route layer
         if (showOptimal) {
-          const optFeatures = routeToLineFeatures(network, optimalRoute, 'optimal');
-          for (const f of optFeatures) {
+          optFullFeatures = routeToLineFeatures(network, optimalRoute, 'optimal');
+          for (const f of optFullFeatures) {
             for (const c of f.geometry.coordinates) {
               bounds.extend(c as [number, number]);
             }
           }
           map.addSource('optimal-route', {
             type: 'geojson',
-            data: { type: 'FeatureCollection', features: optFeatures },
+            data: {
+              type: 'FeatureCollection',
+              features: shouldAnimateReveal ? [] : optFullFeatures,
+            },
           });
           map.addLayer({
             id: 'optimal-casing',
@@ -757,15 +840,18 @@ export function MapView({
 
         // Player route layer
         if (showPlayer && playerRoute) {
-          const playerFeatures = routeToLineFeatures(network, playerRoute, 'player');
-          for (const f of playerFeatures) {
+          playerFullFeatures = routeToLineFeatures(network, playerRoute, 'player');
+          for (const f of playerFullFeatures) {
             for (const c of f.geometry.coordinates) {
               bounds.extend(c as [number, number]);
             }
           }
           map.addSource('player-route', {
             type: 'geojson',
-            data: { type: 'FeatureCollection', features: playerFeatures },
+            data: {
+              type: 'FeatureCollection',
+              features: shouldAnimateReveal ? [] : playerFullFeatures,
+            },
           });
           map.addLayer({
             id: 'player-casing',
@@ -791,6 +877,53 @@ export function MapView({
           });
         }
 
+        // Smooth progressive draw-in animation along the transit tracks on first reveal
+        if (shouldAnimateReveal && (optFullFeatures.length > 0 || playerFullFeatures.length > 0)) {
+          const startTime = performance.now();
+          const drawDurationMs = 700;
+          const optStaggerMs = playerFullFeatures.length > 0 ? 110 : 0;
+
+          const step = (now: number) => {
+            const elapsed = now - startTime;
+            let done = true;
+
+            if (playerFullFeatures.length > 0) {
+              const pRaw = Math.min(1, elapsed / drawDurationMs);
+              const pEased = easeOutCubic(pRaw);
+              const src = map.getSource('player-route') as maplibregl.GeoJSONSource | undefined;
+              if (src) {
+                src.setData({
+                  type: 'FeatureCollection',
+                  features: buildSlicedFeatures(playerFullFeatures, pEased),
+                });
+              }
+              if (pRaw < 1) done = false;
+            }
+
+            if (optFullFeatures.length > 0) {
+              const oElapsed = Math.max(0, elapsed - optStaggerMs);
+              const oRaw = Math.min(1, oElapsed / drawDurationMs);
+              const oEased = easeOutCubic(oRaw);
+              const src = map.getSource('optimal-route') as maplibregl.GeoJSONSource | undefined;
+              if (src) {
+                src.setData({
+                  type: 'FeatureCollection',
+                  features: buildSlicedFeatures(optFullFeatures, oEased),
+                });
+              }
+              if (oRaw < 1) done = false;
+            }
+
+            if (!done) {
+              routeAnimRafRef.current = requestAnimationFrame(step);
+            } else {
+              routeAnimRafRef.current = null;
+            }
+          };
+
+          routeAnimRafRef.current = requestAnimationFrame(step);
+        }
+
         // Transfer hub markers with labels
         const transferStations = new Set<string>();
         const routesForTransfers =
@@ -808,24 +941,45 @@ export function MapView({
           }
         }
 
+        let transferIdx = 0;
         for (const tId of transferStations) {
           if (tId === fromStationId || tId === toStationId) continue;
           const st = network.stations[tId];
           if (!st) continue;
           const m = new maplibregl.Marker({
-            element: createPinElement('transfer', st.name),
+            element: createPinElement(
+              'transfer',
+              st.name,
+              undefined,
+              shouldAnimateReveal ? 240 + transferIdx * 70 : undefined,
+            ),
             anchor: 'bottom',
             offset: [0, 7],
           })
             .setLngLat([st.lon, st.lat])
             .addTo(map);
           markersRef.current.push(m);
+          transferIdx++;
         }
+      } else {
+        lastAnimatedRevealKeyRef.current = '';
+      }
+
+      const pinsKey = `${fromStationId}|${toStationId}`;
+      const shouldAnimatePins =
+        !prefersReducedMotion() && lastAnimatedPinsKeyRef.current !== pinsKey;
+      if (shouldAnimatePins) {
+        lastAnimatedPinsKeyRef.current = pinsKey;
       }
 
       // Start & End icon pins (always visible)
       const startMarker = new maplibregl.Marker({
-        element: createPinElement('start', fromSt.name, startLabel),
+        element: createPinElement(
+          'start',
+          fromSt.name,
+          startLabel,
+          shouldAnimatePins ? 0 : undefined,
+        ),
         anchor: 'bottom',
         offset: [0, 14],
       })
@@ -833,7 +987,12 @@ export function MapView({
         .addTo(map);
 
       const endMarker = new maplibregl.Marker({
-        element: createPinElement('end', toSt.name, endLabel),
+        element: createPinElement(
+          'end',
+          toSt.name,
+          endLabel,
+          shouldAnimatePins ? 90 : undefined,
+        ),
         anchor: 'bottom',
         offset: [0, 14],
       })
@@ -847,10 +1006,10 @@ export function MapView({
         const padding = isDesktop
           ? { top: 96, bottom: 72, left: 450, right: 80 }
           : computeMobilePadding(
-              window.innerHeight,
-              mobileBottomInsetRef.current,
-              false,
-            );
+            window.innerHeight,
+            mobileBottomInsetRef.current,
+            false,
+          );
         const maxZoom = isRevealed ? 13.5 : 12.6;
         const target = map.cameraForBounds(bounds, {
           padding,
@@ -877,7 +1036,8 @@ export function MapView({
             maxZoom,
             bearing: 0,
             pitch: 0,
-            duration,
+            duration: prefersReducedMotion() ? 0 : duration,
+            easing: easeOutCubic,
           },
           { isAutoFit: true },
         );

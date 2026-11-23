@@ -14,11 +14,11 @@ export function HelpModal({ open, onClose, t, feedVersion }: HelpModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs p-0 sm:p-4"
+      className="animate-backdrop-in fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs p-0 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-md max-h-[88dvh] sm:max-h-[85dvh] flex flex-col rounded-t-3xl sm:rounded-2xl bg-white dark:bg-zinc-900 border-t border-x sm:border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden"
+        className="animate-modal-in w-full sm:max-w-md max-h-[88dvh] sm:max-h-[85dvh] flex flex-col rounded-t-3xl sm:rounded-2xl bg-white dark:bg-zinc-900 border-t border-x sm:border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3.5 sm:px-5 sm:py-4 border-b border-zinc-100 dark:border-zinc-800">

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { smoothPolyline, type LngLat } from '../src/utils/map-geometry';
+import {
+  sliceMultiLegPolylines,
+  smoothPolyline,
+  type LngLat,
+} from '../src/utils/map-geometry';
 
 describe('smoothPolyline', () => {
   it('returns input unchanged when fewer than 3 points', () => {
@@ -65,5 +69,35 @@ describe('smoothPolyline', () => {
     expect(
       smoothed.every(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat)),
     ).toBe(true);
+  });
+});
+
+describe('sliceMultiLegPolylines', () => {
+  const leg1: LngLat[] = [
+    [11.5, 48.14],
+    [11.6, 48.14],
+  ];
+  const leg2: LngLat[] = [
+    [11.6, 48.14],
+    [11.7, 48.14],
+  ];
+
+  it('returns empty arrays at progress 0 and full legs at progress 1', () => {
+    expect(sliceMultiLegPolylines([leg1, leg2], 0)).toEqual([[], []]);
+    expect(sliceMultiLegPolylines([leg1, leg2], 1)).toEqual([leg1, leg2]);
+  });
+
+  it('progresses continuously from leg 1 into leg 2', () => {
+    const quarter = sliceMultiLegPolylines([leg1, leg2], 0.25);
+    expect(quarter[0].length).toBe(2);
+    expect(quarter[0][0]).toEqual([11.5, 48.14]);
+    expect(quarter[0][1][0]).toBeCloseTo(11.55, 5);
+    expect(quarter[1]).toEqual([]);
+
+    const threeQuarters = sliceMultiLegPolylines([leg1, leg2], 0.75);
+    expect(threeQuarters[0]).toEqual(leg1);
+    expect(threeQuarters[1].length).toBe(2);
+    expect(threeQuarters[1][0]).toEqual([11.6, 48.14]);
+    expect(threeQuarters[1][1][0]).toBeCloseTo(11.65, 5);
   });
 });

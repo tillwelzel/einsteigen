@@ -203,7 +203,7 @@ export function DailySummaryModal({
       await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {}
+    } catch { }
   };
 
   const handleSelectRound = (idx: number) => {
@@ -213,11 +213,11 @@ export function DailySummaryModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs p-0 sm:p-4"
+      className="animate-backdrop-in fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs p-0 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="relative w-full sm:max-w-md max-h-[90dvh] sm:max-h-[88dvh] flex flex-col rounded-t-3xl sm:rounded-2xl bg-white dark:bg-zinc-900 border-t border-x sm:border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden"
+        className="animate-modal-in relative w-full sm:max-w-md max-h-[90dvh] sm:max-h-[88dvh] flex flex-col rounded-t-3xl sm:rounded-2xl bg-white dark:bg-zinc-900 border-t border-x sm:border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -257,13 +257,12 @@ export function DailySummaryModal({
 
             <div className="px-2">
               <div
-                className={`font-display font-bold text-xl tabular-nums leading-none ${
-                  solvedCount === 0
+                className={`font-display font-bold text-xl tabular-nums leading-none ${solvedCount === 0
                     ? 'text-zinc-400'
                     : totalDeltaMin <= 0
                       ? 'text-emerald-600 dark:text-emerald-400'
                       : 'text-zinc-900 dark:text-white'
-                }`}
+                  }`}
               >
                 {solvedCount === 0
                   ? '—'
@@ -305,11 +304,10 @@ export function DailySummaryModal({
                 onClick={() => handleSelectRound(i)}
                 title={`${i + 1}. ${t.gradeLabel[r.grade]}`}
                 aria-label={`${i + 1}. ${t.gradeLabel[r.grade]}`}
-                className={`h-1.5 rounded-full transition-opacity cursor-pointer ${gradeColor(r.grade)} ${
-                  expandedIndex !== null && expandedIndex !== i
+                className={`h-1.5 rounded-full transition-opacity cursor-pointer ${gradeColor(r.grade)} ${expandedIndex !== null && expandedIndex !== i
                     ? 'opacity-40 hover:opacity-80'
                     : 'opacity-100'
-                }`}
+                  }`}
               />
             ))}
           </div>
@@ -378,9 +376,8 @@ export function DailySummaryModal({
                           </span>
                         ) : null}
                         <ChevronDown
-                          className={`w-3.5 h-3.5 text-zinc-400 transition-transform duration-150 ${
-                            isExpanded ? 'rotate-180' : ''
-                          }`}
+                          className={`w-3.5 h-3.5 text-zinc-400 transition-transform duration-150 ${isExpanded ? 'rotate-180' : ''
+                            }`}
                         />
                       </div>
                     </div>
@@ -452,35 +449,42 @@ export function DailySummaryModal({
                     </div>
                   </button>
 
-                  {isExpanded && (
-                    <div className="px-3.5 pb-3 pt-2.5 bg-zinc-50/70 dark:bg-zinc-950/50 border-t border-zinc-100 dark:border-zinc-800/80 space-y-3">
-                      {r.playerRoute && (
-                        <LegDetails
-                          route={r.playerRoute}
-                          network={network}
-                          t={t}
-                          label={t.yourRoute}
-                        />
-                      )}
-                      {!exactMatch && (
-                        <LegDetails
-                          route={r.optimalRoute}
-                          network={network}
-                          t={t}
-                          label={t.optimalRoute}
-                        />
-                      )}
+                  <div
+                    className="accordion-grid"
+                    data-open={isExpanded ? 'true' : 'false'}
+                    aria-hidden={!isExpanded}
+                  >
+                    <div className="accordion-inner">
+                      <div className="px-3.5 pb-3 pt-2.5 bg-zinc-50/70 dark:bg-zinc-950/50 border-t border-zinc-100 dark:border-zinc-800/80 space-y-3">
+                        {r.playerRoute && (
+                          <LegDetails
+                            route={r.playerRoute}
+                            network={network}
+                            t={t}
+                            label={t.yourRoute}
+                          />
+                        )}
+                        {!exactMatch && (
+                          <LegDetails
+                            route={r.optimalRoute}
+                            network={network}
+                            t={t}
+                            label={t.optimalRoute}
+                          />
+                        )}
 
-                      <button
-                        type="button"
-                        onClick={() => onInspectRound(i)}
-                        className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-medium text-xs py-1.5 px-3 transition-colors cursor-pointer"
-                      >
-                        <MapPin className="w-3.5 h-3.5 text-zinc-400" />
-                        <span>{t.summaryInspectOnMap}</span>
-                      </button>
+                        <button
+                          type="button"
+                          tabIndex={isExpanded ? 0 : -1}
+                          onClick={() => onInspectRound(i)}
+                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-[0.985] text-zinc-700 dark:text-zinc-200 font-medium text-xs py-1.5 px-3 transition-all cursor-pointer"
+                        >
+                          <MapPin className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>{t.summaryInspectOnMap}</span>
+                        </button>
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             })}

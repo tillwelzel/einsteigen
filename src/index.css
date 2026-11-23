@@ -79,3 +79,236 @@
 .animate-pulse-ring {
   animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
 }
+
+/* Purposeful, GPU-composited motion primitives */
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 26px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-10px, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes header-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes badge-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.76);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes station-swap {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 5px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes shake-x {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  20% {
+    transform: translate3d(-5px, 0, 0);
+  }
+  45% {
+    transform: translate3d(4px, 0, 0);
+  }
+  70% {
+    transform: translate3d(-3px, 0, 0);
+  }
+  88% {
+    transform: translate3d(2px, 0, 0);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-sheet-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 28px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes pin-pop {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.6);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes transfer-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.65);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-surface-in {
+  animation: sheet-in 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@media (min-width: 768px) {
+  .animate-surface-in {
+    animation: panel-in 300ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+}
+
+.animate-header-in {
+  animation: header-in 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.animate-badge-pop {
+  animation: badge-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+.animate-station-swap {
+  animation: station-swap 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.animate-reveal-up {
+  animation: reveal-up 280ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.animate-shake-x {
+  animation: shake-x 340ms cubic-bezier(0.36, 0.07, 0.19, 0.97) backwards;
+}
+
+.animate-backdrop-in {
+  animation: backdrop-in 180ms ease-out backwards;
+}
+
+.animate-modal-in {
+  animation: modal-sheet-in 280ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@media (min-width: 640px) {
+  .animate-modal-in {
+    animation: modal-pop-in 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+}
+
+.animate-pin-pop {
+  transform-origin: bottom center;
+  animation: pin-pop 340ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+}
+
+.animate-transfer-pop {
+  transform-origin: bottom center;
+  animation: transfer-pop 280ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+}
+
+/* Smooth 60fps CSS Grid height accordions */
+.accordion-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms ease;
+}
+
+.accordion-grid[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.accordion-grid > .accordion-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Respect OS reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-ring,
+  .animate-surface-in,
+  .animate-header-in,
+  .animate-badge-pop,
+  .animate-station-swap,
+  .animate-reveal-up,
+  .animate-shake-x,
+  .animate-backdrop-in,
+  .animate-modal-in,
+  .animate-pin-pop,
+  .animate-transfer-pop {
+    animation: none !important;
+  }
+
+  .accordion-grid {
+    transition: none !important;
+  }
+}

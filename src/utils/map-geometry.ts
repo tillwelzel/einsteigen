@@ -143,3 +143,85 @@ export function smoothPolyline(
 
   return result;
 }
+
+/**
+ * Computes latitude-compensated segment lengths for a polyline.
+ */
+function computeSegmentLengths(coords: LngLat[]): number[] {
+  if (coords.length < 2) return [];
+  let latSum = 0;
+  for (const c of coords) latSum += c[1];
+  const cosLat = Math.cos(((latSum / coords.length) * Math.PI) / 180) || 1;
+
+  const lengths: number[] = [];
+  for (let i = 0; i < coords.length - 1; i++) {
+    const dx = (coords[i + 1][0] - coords[i][0]) * cosLat;
+    const dy = coords[i + 1][1] - coords[i][1];
+    lengths.push(Math.hypot(dx, dy));
+  }
+  return lengths;
+}
+
+/**
+ * Returns the prefix of a polyline up to `targetLength` (in latitude-compensated units).
+ * Always preserves at least 2 points when `targetLength > 0` and input has >= 2 points.
+ */
+function slicePolylineToLength(
+  coords: LngLat[],
+  segLengths: number[],
+  targetLength: number,
+): LngLat[] {
+  if (coords.length < 2 || targetLength <= 0) return [];
+  const out: LngLat[] = [coords[0]];
+  let acc = 0;
+
+  for (let i = 0; i < segLengths.length; i++) {
+    const seg = segLengths[i];
+    if (acc + seg >= targetLength) {
+      const remaining = targetLength - acc;
+      const frac = seg > 1e-12 ? Math.max(0, Math.min(1, remaining / seg)) : 1;
+      const a = coords[i];
+      const b = coords[i + 1];
+      out.push([a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac]);
+      return out;
+    }
+    acc += seg;
+    out.push(coords[i + 1]);
+  }
+
+  return out;
+}
+
+/**
+ * Slices a sequence of leg polylines at normalized progress `t` in [0, 1]
+ * using constant arc-length velocity across all legs seamlessly.
+ */
+export function sliceMultiLegPolylines(
+  legs: LngLat[][],
+  progress: number,
+): LngLat[][] {
+  const clamped = Math.max(0, Math.min(1, progress));
+  if (clamped <= 0) return legs.map(() => []);
+  if (clamped >= 1) return legs;
+
+  const legSegLengths = legs.map(computeSegmentLengths);
+  const legTotals = legSegLengths.map((segs) =>
+    segs.reduce((sum, len) => sum + len, 0),
+  );
+  const grandTotal = legTotals.reduce((sum, len) => sum + len, 0);
+  if (grandTotal <= 1e-12) return legs;
+
+  let remaining = grandTotal * clamped;
+
+  return legs.map((coords, idx) => {
+    const total = legTotals[idx];
+    if (remaining <= 0 || coords.length < 2) return [];
+    if (remaining >= total) {
+      remaining -= total;
+      return coords;
+    }
+    const sliced = slicePolylineToLength(coords, legSegLengths[idx], remaining);
+    remaining = 0;
+    return sliced;
+  });
+}

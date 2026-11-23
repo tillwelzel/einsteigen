@@ -66,7 +66,7 @@ export function HomeScreen({
     <section
       ref={sectionRef}
       aria-label={t.appName}
-      className="fixed z-20 inset-x-0 bottom-0 md:inset-x-auto md:left-4 md:top-1/2 md:-translate-y-1/2 md:bottom-auto md:w-[404px] max-h-[68dvh] md:max-h-[calc(100dvh-2rem)] overflow-y-auto bg-white/94 dark:bg-zinc-900/94 backdrop-blur-xl border-t border-x md:border border-zinc-200/80 dark:border-zinc-800 rounded-t-3xl md:rounded-3xl px-4 pt-3.5 safe-bottom md:p-6 shadow-2xl shadow-black/15"
+      className="animate-surface-in fixed z-20 inset-x-0 bottom-0 md:inset-x-auto md:left-4 md:top-1/2 md:-translate-y-1/2 md:bottom-auto md:w-[404px] max-h-[68dvh] md:max-h-[calc(100dvh-2rem)] overflow-y-auto bg-white/94 dark:bg-zinc-900/94 backdrop-blur-xl border-t border-x md:border border-zinc-200/80 dark:border-zinc-800 rounded-t-3xl md:rounded-3xl px-4 pt-3.5 safe-bottom md:p-6 shadow-2xl shadow-black/15"
     >
       {/* Brand header */}
       <div className="flex items-center justify-between gap-2.5">
@@ -117,22 +117,20 @@ export function HomeScreen({
           <button
             type="button"
             onClick={() => onChangeNetworkMode('us')}
-            className={`py-1.5 md:py-2 rounded-lg transition-all cursor-pointer ${
-              networkMode === 'us'
+            className={`py-1.5 md:py-2 rounded-lg transition-all cursor-pointer ${networkMode === 'us'
                 ? 'bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white shadow-xs'
                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-            }`}
+              }`}
           >
             {t.modeUS}
           </button>
           <button
             type="button"
             onClick={() => onChangeNetworkMode('ust')}
-            className={`py-1.5 md:py-2 rounded-lg transition-all cursor-pointer ${
-              networkMode === 'ust'
+            className={`py-1.5 md:py-2 rounded-lg transition-all cursor-pointer ${networkMode === 'ust'
                 ? 'bg-[#e30613] text-white shadow-xs'
                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-            }`}
+              }`}
           >
             {t.modeUST}
           </button>
