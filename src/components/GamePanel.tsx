@@ -14,7 +14,6 @@ import {
   RotateCcw,
   Shuffle,
   SlidersHorizontal,
-  Sparkles,
   TramFront,
   Trophy,
 } from 'lucide-react';
@@ -724,8 +723,10 @@ export function GamePanel({
                 currentResult.grade,
               )}`}
             >
-              <div className="flex items-center gap-2 font-display font-bold text-sm">
-                <Sparkles className="w-4 h-4 shrink-0" />
+              <div className="flex items-center gap-1.5 font-display font-bold text-sm">
+                {currentResult.grade === 'optimal' && (
+                  <Check className="w-4 h-4 shrink-0" />
+                )}
                 <span>{t.gradeLabel[currentResult.grade]}</span>
               </div>
               <div className="text-xs font-semibold">

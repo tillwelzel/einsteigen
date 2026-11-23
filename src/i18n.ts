@@ -84,26 +84,12 @@ export interface Translations {
   sameDurationTie: string;
   attemptHistory: string;
   invalidAttempt: string;
-  summaryScoreLabel: string;
-  summaryRank: Record<'legend' | 'pro' | 'commuter' | 'rider' | 'tourist', string>;
-  summarySolvedOf: (solved: number, total: number) => string;
   summaryOptimalMetric: string;
   summaryTimeDeltaMetric: string;
-  summaryNoTimeLost: string;
-  summaryPacePct: (pct: number) => string;
-  summaryFirstTryMetric: string;
-  summaryAvgTries: (avg: string) => string;
-  summaryTransfersMetric: string;
-  summaryTransfersCompare: (yours: number, optimal: number) => string;
+  summarySolvedMetric: string;
   summaryYoursShort: string;
   summaryOptimalShort: string;
-  summaryExactBadge: string;
-  summaryAlternativeTie: string;
-  summaryTriesUsed: (n: number) => string;
   summaryInspectOnMap: string;
-  summaryTapToCompare: string;
-  summaryStreakPill: (days: number) => string;
-  summaryTripsHeading: string;
   freePlayFilters: string;
   freePlayZonesLabel: string;
   freePlayAllZones: string;
@@ -232,32 +218,12 @@ const de: Translations = {
   sameDurationTie: 'Gleich schnell wie die Optimalroute!',
   attemptHistory: 'Fehlversuche',
   invalidAttempt: 'Ungültig',
-  summaryScoreLabel: 'Score',
-  summaryRank: {
-    legend: 'MVG-Legende',
-    pro: 'Stammstrecken-Profi',
-    commuter: 'Ortskundig',
-    rider: 'Gelegenheitsfahrer',
-    tourist: 'Netzplan-Neuling',
-  },
-  summarySolvedOf: (solved, total) => `${solved}/${total} gelöst`,
   summaryOptimalMetric: 'Optimal',
   summaryTimeDeltaMetric: 'Zeitverlust',
-  summaryNoTimeLost: 'Perfektes Timing',
-  summaryPacePct: (pct) => `${pct}% Tempo`,
-  summaryFirstTryMetric: '1. Versuch',
-  summaryAvgTries: (avg) => `Ø ${avg} Versuche`,
-  summaryTransfersMetric: 'Umstiege',
-  summaryTransfersCompare: (yours, optimal) => `${yours} statt ${optimal}`,
+  summarySolvedMetric: 'Gelöst',
   summaryYoursShort: 'Deine',
   summaryOptimalShort: 'Optimal',
-  summaryExactBadge: 'Exakter Treffer',
-  summaryAlternativeTie: 'Gleich schnell!',
-  summaryTriesUsed: (n) => (n === 1 ? '1 Versuch' : `${n} Versuche`),
   summaryInspectOnMap: 'Auf Karte ansehen',
-  summaryTapToCompare: 'Tippen für Details & Karte',
-  summaryStreakPill: (days) => `${days}T Serie`,
-  summaryTripsHeading: 'Streckenvergleich',
   freePlayFilters: 'Filter',
   freePlayZonesLabel: 'MVV-Zonen',
   freePlayAllZones: 'Alle',
@@ -387,32 +353,12 @@ const en: Translations = {
   sameDurationTie: 'Tied for fastest!',
   attemptHistory: 'Failed attempts',
   invalidAttempt: 'Invalid',
-  summaryScoreLabel: 'Score',
-  summaryRank: {
-    legend: 'Munich Transit Legend',
-    pro: 'Network Pro',
-    commuter: 'Local Commuter',
-    rider: 'Occasional Rider',
-    tourist: 'Needs a Transit Map',
-  },
-  summarySolvedOf: (solved, total) => `${solved}/${total} solved`,
   summaryOptimalMetric: 'Optimal',
-  summaryTimeDeltaMetric: 'Time Lost',
-  summaryNoTimeLost: 'Zero time lost',
-  summaryPacePct: (pct) => `${pct}% pace`,
-  summaryFirstTryMetric: '1st Try',
-  summaryAvgTries: (avg) => `${avg} avg tries`,
-  summaryTransfersMetric: 'Transfers',
-  summaryTransfersCompare: (yours, optimal) => `${yours} vs ${optimal}`,
+  summaryTimeDeltaMetric: 'Time lost',
+  summarySolvedMetric: 'Solved',
   summaryYoursShort: 'Yours',
   summaryOptimalShort: 'Optimal',
-  summaryExactBadge: 'Exact match',
-  summaryAlternativeTie: 'Tied fastest!',
-  summaryTriesUsed: (n) => (n === 1 ? '1 try' : `${n} tries`),
-  summaryInspectOnMap: 'Inspect on map',
-  summaryTapToCompare: 'Click any trip for leg details',
-  summaryStreakPill: (days) => `${days}d streak`,
-  summaryTripsHeading: 'Trip breakdown',
+  summaryInspectOnMap: 'View on map',
   freePlayFilters: 'Options',
   freePlayZonesLabel: 'MVV Zones',
   freePlayAllZones: 'All',
